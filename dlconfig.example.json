@@ -1,0 +1,17 @@
+{
+  "sources": [
+    {
+      "name": "hono",
+      "url": "https://hono.dev/llms-full.txt"
+    }
+  ],
+  "embedding": {
+    "provider": "ollama",
+    "model": "nomic-embed-text",
+    "ollamaUrl": "http://localhost:11434"
+  },
+  "rebuildInterval": "24h",
+  "maxChunksPerQuery": 5,
+  "idleTimeout": "30m",
+  "jinaApiKey": ""
+}

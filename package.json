@@ -1,0 +1,62 @@
+{
+  "name": "@ramankarki/doclab",
+  "version": "1.0.0",
+  "description": "Local knowledge server for coding agents — fresh docs and articles on demand via HTTP",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/ramankarki/doclab#readme",
+  "bugs": {
+    "url": "https://github.com/ramankarki/doclab/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "doclab": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "bun build src/cli.ts --outdir dist --target bun && bun build src/server-daemon.ts --outdir dist --target bun",
+    "prepublishOnly": "bun run build && bun test && bun run typecheck",
+    "publish:dry": "npm pack --dry-run",
+    "dev": "bun run --watch src/server.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "linkedom": "^0.18.12",
+    "sqlite-vec": "^0.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ramankarki/doclab.git"
+  },
+  "keywords": [
+    "doclab",
+    "documentation",
+    "knowledge-server",
+    "rag",
+    "embeddings",
+    "ollama",
+    "sqlite-vec",
+    "semantic-search",
+    "coding-agent",
+    "ai-agent",
+    "llm-tools",
+    "vector-search",
+    "hybrid-search",
+    "local-first",
+    "privacy"
+  ]
+}

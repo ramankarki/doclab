@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="author" content="Dan Abramov">
+  <meta property="article:published_time" content="2019-03-11">
+  <title>Why Do React Hooks Rely on Call Order?</title>
+  <script src="analytics.js"></script>
+  <style>body { font-family: sans-serif; }</style>
+</head>
+<body>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/archive">Archive</a>
+  </nav>
+  <article>
+    <h1>Why Do React Hooks Rely on Call Order?</h1>
+    <p>React hooks rely on call order because React uses a linked list internally to track hook state.</p>
+    
+    <h2>How useState Works Internally</h2>
+    <p>When you call <code>useState</code>, React looks at the current position in the hooks list.</p>
+    
+    <pre><code class="language-js">function useState(initialValue) {
+  const hook = {
+    memoizedState: initialValue,
+    queue: [],
+    next: null
+  }
+  return [hook.memoizedState, dispatchAction]
+}</code></pre>
+
+    <h2>The Rules of Hooks</h2>
+    <p>React enforces two main rules:</p>
+    <ul>
+      <li>Only call hooks at the <strong>top level</strong> of your component</li>
+      <li>Only call hooks from React function components or <em>custom hooks</em></li>
+    </ul>
+
+    <p>Learn more at <a href="https://react.dev">React documentation</a>.</p>
+  </article>
+  <footer>
+    <p>&copy; 2019 Dan Abramov</p>
+  </footer>
+</body>
+</html>
