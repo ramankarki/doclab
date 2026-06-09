@@ -37,7 +37,7 @@ doclab add https://<package>.dev/docs/guide       # any URL works
 
 # 3. Check if existing sources are stale
 doclab status
-# If any show ⚠ or fetched > rebuildInterval ago, refresh:
+# If any show [stale] or fetched > rebuildInterval ago, refresh:
 doclab pull
 
 # 4. Query the latest docs before writing each function
@@ -61,7 +61,7 @@ Query doclab BEFORE:
   results for <query>. The docs may not cover this topic."
 - If the package is not in \`doclab list\`: ASK before guessing. Say
   "I don't have <package> docs. Run: doclab add <url>"
-- If sources are stale (⚠ in \`doclab status\`): WARN THE USER.
+- If sources are stale ([stale] in \`doclab status\`): WARN THE USER.
   Say "Warning: <source> docs are stale. Run: doclab pull"
 
 ### NEVER do this

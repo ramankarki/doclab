@@ -46,6 +46,7 @@ import {
   addSourceToConfig,
   removeSourceFromConfig,
 } from "./config";
+import { c } from "./lib/colors";
 
 export interface ServerState {
   config: DlConfig;
@@ -109,7 +110,7 @@ export function createServer(
           404
         );
       } catch (e: any) {
-        console.error(`[doclab] Error handling ${method} ${path}:`, e.message);
+        console.error(`${c.error}[doclab]${c.reset} Error handling ${method} ${path}:`, e.message);
         return json(
           {
             error: e.message ?? "Internal server error",
@@ -186,7 +187,7 @@ async function handleSearch(
       const embeddings = await state.embedder.embedBatch([body.query]);
       queryEmbedding = embeddings[0];
     } catch (e: any) {
-      console.error("[doclab] Embedding failed:", e.message);
+      console.error(`${c.error}[doclab]${c.reset} Embedding failed:`, e.message);
       // Degraded mode — keyword only
     }
   }
@@ -364,7 +365,7 @@ async function handleRebuild(state: ServerState): Promise<Response> {
       try {
         await addSource(src.url, src.name, state);
       } catch (e: any) {
-        console.error(`[doclab] Rebuild failed for ${src.name}:`, e.message);
+        console.error(`${c.error}[doclab]${c.reset} Rebuild failed for ${src.name}:`, e.message);
       }
     }
 
@@ -520,7 +521,7 @@ async function pullSources(
     } catch (e: any) {
       if (e instanceof FetchError && e.status === 404) {
         // Dead URL — remove
-        console.log(`[doclab] ⚠ ${src.name}: URL returned 404. Source removed.`);
+        console.log(`${c.warn}[doclab]${c.reset} ${src.name}: URL returned 404. Source removed.`);
         const db = getDb();
         deleteSource(db, src.name);
         removeSourceFromConfig(src.name);
@@ -536,7 +537,7 @@ async function pullSources(
 
         if (failures >= 3) {
           console.log(
-            `[doclab] ⚠ ${src.name}: unreachable ${failures} times. Source removed.`
+            `${c.warn}[doclab]${c.reset} ${src.name}: unreachable ${failures} times. Source removed.`
           );
           deleteSource(db, src.name);
           removeSourceFromConfig(src.name);
@@ -545,7 +546,7 @@ async function pullSources(
             "UPDATE sources SET consecutive_failures = ? WHERE name = ?"
           ).run(failures, src.name);
           console.log(
-            `[doclab] ⚠ ${src.name}: fetch failed (${failures}/3). Retrying next cycle.`
+            `${c.warn}[doclab]${c.reset} ${src.name}: fetch failed (${failures}/3). Retrying next cycle.`
           );
         }
       }
