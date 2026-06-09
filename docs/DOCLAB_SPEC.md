@@ -234,6 +234,8 @@ doclab pull [name]              # re-fetch sources, update changed
 doclab rebuild                  # drop DB, re-index all from scratch
 doclab search <query> [--source <n>] [--topK <k>]  # hybrid search
 doclab init                     # generate AGENTS.md snippet
+doclab mem                       # real-time memory usage (daemon, CLI, DB, logs, vec idx)
+doclab memory                    # alias for doclab mem
 ```
 
 ### 3.6 CLI Output Style
@@ -275,7 +277,28 @@ total: 3
 ```
 Columns auto-sized. URL capped at 50 chars with … truncation. Stale rows (fetched > rebuildInterval) show yellow ⚠.
 
-### 3.7 `doclab status` Output
+### 3.7 `doclab mem` Output
+
+```
+$ doclab mem
+Daemon (pid: 48291)
+RSS:  156.5 MB
+
+CLI (pid: 58321)
+RSS:  64.2 MB
+Heap: 28.1 MB / 32.8 MB
+
+Database
+DB:     1.8 MB (~/.doclab/doclab.db)
+Logs:    0.5 MB (~/.doclab/logs)
+
+Vec idx: 24.5 MB (768d × 8356 chunks)
+
+────────────────────────────────────────
+Total RSS: 220.7 MB (daemon + CLI)
+```
+
+### 3.8 `doclab status` Output
 
 ```
 $ doclab status
@@ -295,7 +318,7 @@ Daemon: not running
   Start with: doclab start
 ```
 
-### 3.8 Auto-Start
+### 3.9 Auto-Start
 
 ```
 $ doclab search "hono cors"          # daemon not running? auto-starts
@@ -306,7 +329,7 @@ Ready on http://127.0.0.1:8475
 
 Any query command auto-starts the daemon if it's not running.
 
-### 3.9 Stop
+### 3.10 Stop
 
 ```
 doclab stop
@@ -1460,7 +1483,7 @@ No LlamaIndex. No HTML parser library. No markdown library. No vector DB. Pure B
 | `ollama` | 4 | Reachability, model detect, batch embed, error handling |
 | `search` | 9 | Vector search (mock embeddings), keyword search, RRF fusion, source filter, kind filter, empty results, degraded mode, topK limit, response format |
 | `server` | 9 | /health, /search (valid + missing query + source filter + kind filter), /sources, /add, /remove, /pull, /rebuild, error handling |
-| `cli` | 6 | start daemon, status, search, add, remove, list |
+| `cli` | 7 | start daemon, status, search, add, remove, list, mem |
 | `integration` | 4 | E2E: add → search, pull → update, remove → cleanup, rebuild (with real Ollama if available) |
 | **Total** | **~70** | **~14 test files** |
 
@@ -1500,7 +1523,7 @@ Everything in this spec ships as v1.0. Single release.
 - [x] Startup validation: sqlite-vec load, Ollama reachability, config parse
 - [x] `~/.doclab/dlconfig.json` config file with validation on startup and `doclab add`
 - [x] `doclab add <url> [--name]` / `doclab remove <name>` / `doclab list` source management
-- [x] CLI: `start`, `stop`, `status`, `add`, `remove`, `list`, `pull`, `search`, `rebuild`, `init`
+- [x] CLI: `start`, `stop`, `status`, `add`, `remove`, `list`, `pull`, `search`, `rebuild`, `init`, `mem`
 - [x] Idle auto-shutdown (configurable, default 30m)
 - [x] Graceful shutdown: SIGTERM → drain connections → close DB → remove PID/port files
 - [x] Crash recovery: stale PID detection on next start

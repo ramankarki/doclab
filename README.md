@@ -87,6 +87,7 @@ Agent asks "how to use Bun with Drizzle ORM"
 | `doclab start` | Start background daemon (idempotent, auto-starts on any command) |
 | `doclab stop` | Stop daemon |
 | `doclab status` | Daemon health, chunk count, Ollama status, uptime |
+| `doclab mem \| memory` | Real-time memory usage (RSS, heap, DB, logs, vector index) |
 | `doclab add <url> [--name <n>]` | Fetch → extract content → chunk → embed → index |
 | `doclab remove <name>` | Delete source and all chunks |
 | `doclab list` | All sources with chunk counts and freshness |
@@ -94,6 +95,7 @@ Agent asks "how to use Bun with Drizzle ORM"
 | `doclab search <query> [...]` | Hybrid search (vector + keyword + RRF fusion) |
 | `doclab rebuild` | Drop DB, re-index all sources from scratch |
 | `doclab init` | Generate AGENTS.md snippet for your agent's system prompt |
+| `doclab mem` | `doclab memory` | Real-time memory usage: daemon RSS, CLI heap, DB size, logs, vector index |
 
 The daemon auto-shuts down after 30 minutes idle. It auto-starts on the next command.
 
