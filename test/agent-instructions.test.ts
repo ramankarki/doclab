@@ -17,4 +17,13 @@ describe("agent-instructions", () => {
     expect(instructions).toContain("doclab pull");
     expect(instructions).toContain("--source");
   });
+
+  test("contains mandatory language", () => {
+    const instructions = generateAgentInstructions(8475);
+    expect(instructions).toContain("MANDATORY");
+    expect(instructions).toContain("NEVER");
+    expect(instructions).toContain("training data is frozen");
+    expect(instructions).toContain("doclab rebuild");
+    expect(instructions).toContain("doclab status");
+  });
 });
