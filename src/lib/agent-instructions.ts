@@ -2,8 +2,8 @@
  * AGENTS.md snippet generation — `doclab init` command
  */
 
-export function generateAgentInstructions(port: number): string {
-  return `## Documentation lookup (doclab) — MANDATORY
+export function generateAgentInstructions(): string {
+  return `## Documentation lookup (doclab)
 
 **CRITICAL RULE:** Your training data is frozen at your cutoff date. APIs change,
 signatures move, packages deprecate, new features ship weekly. NEVER trust your
@@ -12,16 +12,17 @@ doclab first. Guesswork produces broken code.
 
 ### What doclab provides
 
-| Capability | Command |
-|-----------|---------|
-| Search latest docs | \`doclab search "<package> <topic>"\` |
-| Filter by source | \`doclab search "<query>" --source <name>\` |
-| Filter by kind | \`doclab search "<query>" --kind article\` |
-| List all sources | \`doclab list\` |
-| Check freshness | \`doclab status\` |
-| Add new source | \`doclab add <url> [--name <n>]\` |
-| Refresh stale docs | \`doclab pull [name]\` |
-| Full re-index | \`doclab rebuild\` |
+| Command | Purpose |
+|---------|---------|
+| \`doclab search "<query>"\` | Search indexed docs (hybrid: vector + keyword) |
+| \`doclab search "<q>" --source <name>\` | Filter by source |
+| \`doclab search "<q>" --kind <kind>\` | Filter by kind (docs/article/tutorial/reference) |
+| \`doclab search "<q>" --topK <n>\` | Return more results (default 5) |
+| \`doclab list\` | List all indexed sources |
+| \`doclab status\` | Daemon health, chunk counts, freshness |
+| \`doclab add <url> [--name <n>]\` | Fetch → extract → chunk → embed → index |
+| \`doclab pull [name]\` | Re-fetch all or one source |
+| \`doclab rebuild\` | Drop DB, re-index everything |
 
 ### Mandatory workflow before writing ANY code
 
@@ -77,11 +78,9 @@ Query doclab BEFORE:
 doclab search "hono cors middleware setup"
 doclab search "drizzle sqlite schema definition" --source drizzle
 doclab search "stripe webhook signature verification"
-doclab search "better auth session management plugin"
+doclab search "better auth session management"
 doclab search "react hooks pattern" --kind article
 doclab search "tanstack query useQuery options" --source tanstack
 \`\`\`
-
-doclab runs on http://127.0.0.1:${port}. Auto-starts on first search.
 `;
 }

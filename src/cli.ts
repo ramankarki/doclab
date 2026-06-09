@@ -389,9 +389,7 @@ async function cmdRebuild() {
 }
 
 async function cmdInit() {
-  const port = readPort();
-  const portNum = port ?? 8475;
-  console.log(generateAgentInstructions(portNum));
+  console.log(generateAgentInstructions());
   console.log("\n# Append the above to your AGENTS.md or project instructions file.");
 }
 
