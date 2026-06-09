@@ -95,7 +95,6 @@ Agent asks "how to use Bun with Drizzle ORM"
 | `doclab search <query> [...]` | Hybrid search (vector + keyword + RRF fusion) |
 | `doclab rebuild` | Drop DB, re-index all sources from scratch |
 | `doclab init` | Generate AGENTS.md snippet for your agent's system prompt |
-| `doclab mem` | `doclab memory` | Real-time memory usage: daemon RSS, CLI heap, DB size, logs, vector index |
 
 The daemon auto-shuts down after 30 minutes idle. It auto-starts on the next command.
 
