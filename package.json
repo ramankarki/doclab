@@ -1,6 +1,6 @@
 {
   "name": "doclab",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Local knowledge server for coding agents — fresh docs and articles on demand via HTTP",
   "type": "module",
   "license": "MIT",
