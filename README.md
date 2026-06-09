@@ -5,7 +5,7 @@ Agents write stale code because their training data is old. **doclab** gives the
 ## Quick Start
 
 ```bash
-bun add -g @ramankarki/doclab
+bun add -g doclab
 doclab start
 doclab add https://hono.dev/llms-full.txt
 doclab add https://orm.drizzle.team/llms-full.txt

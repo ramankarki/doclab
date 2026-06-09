@@ -157,7 +157,7 @@ Global. One per machine. Not in any project.
 ### 3.2 Package Model
 
 ```bash
-bun add -g @ramankarki/doclab
+bun add -g doclab
 doclab start
 ```
 
@@ -1358,7 +1358,7 @@ doclab/
 
 ```json
 {
-  "name": "@ramankarki/doclab",
+  "name": "doclab",
   "version": "0.1.0",
   "description": "Local knowledge server for coding agents — fresh docs and articles on demand via HTTP",
   "type": "module",
