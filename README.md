@@ -195,11 +195,11 @@ The daemon runs on `http://127.0.0.1:{port}` (bind to localhost only). No authen
 Daemon logs are written to `~/.doclab/logs/daemon.log`:
 
 ```
-[2026-06-09T11:00:00.000Z] ✓ Ollama: connected (nomic-embed-text, 768d)
-[2026-06-09T11:00:00.100Z] ✓ sqlite-vec: loaded
-[2026-06-09T11:00:00.200Z] ✓ Ready on http://127.0.0.1:8475
+[2026-06-09T11:00:00.000Z] Ollama: connected (nomic-embed-text, 768d)
+[2026-06-09T11:00:00.100Z] sqlite-vec: loaded
+[2026-06-09T11:00:00.200Z] Ready on http://127.0.0.1:8475
 [2026-06-09T11:00:00.300Z] Auto-rebuild: every 24h
-[2026-06-10T11:00:00.400Z] [doclab] Auto-rebuild: checking 5 source(s)...
+[2026-06-10T11:00:00.400Z] [doclab] Auto-rebuild: checking 5 sources...
 [2026-06-10T11:00:45.500Z] [doclab] Auto-rebuild: updated hono
 [2026-06-10T11:30:00.600Z] [doclab] Idle timeout (30m). Shutting down.
 ```

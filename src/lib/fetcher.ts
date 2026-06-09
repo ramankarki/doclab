@@ -28,6 +28,10 @@ export async function fetchUrl(
   url: string,
   jinaApiKey?: string
 ): Promise<FetchResult> {
+  // npmjs.com package pages: use registry API (SPA — raw HTML is empty shell)
+  const npmContent = await fetchNpmContent(url);
+  if (npmContent) return npmContent;
+
   // Try direct fetch first
   try {
     const result = await directFetch(url);
@@ -96,7 +100,7 @@ async function directFetch(url: string): Promise<FetchResult> {
 
   const isHtml = contentType.includes("text/html") || !isMarkdown;
 
-  const meta = extractMeta(raw, isHtml, url);
+  const meta = await extractMeta(raw, isHtml, url);
 
   return {
     content: raw,
@@ -135,7 +139,7 @@ async function jinaFetch(
   const hash = createHash("sha256").update(raw).digest("hex");
 
   // Jina AI returns clean markdown
-  const meta = extractMeta(raw, false, url);
+  const meta = await extractMeta(raw, false, url);
 
   return {
     content: raw,
@@ -152,11 +156,11 @@ function isBotDetectionPage(html: string): boolean {
   return BOT_DETECTION_PATTERNS.some((p) => p.test(html));
 }
 
-function extractMeta(
+async function extractMeta(
   raw: string,
   isHtml: boolean,
   url: string
-): Partial<SourceMeta> {
+): Promise<Partial<SourceMeta>> {
   const meta: Partial<SourceMeta> = {};
   const u = new URL(url);
   meta.domain = u.hostname;
@@ -200,6 +204,9 @@ function extractMeta(
     );
   if (versionMatch) {
     meta.version = versionMatch[1] || versionMatch[2];
+  } else {
+    // Try npm registry for npmjs.com package pages
+    meta.version = await detectNpmVersion(url);
   }
 
   // Detect kind
@@ -253,6 +260,23 @@ export function chunkHash(source: string, sectionPath: string): string {
     .slice(0, 16);
 }
 
+async function detectNpmVersion(url: string): Promise<string | undefined> {
+  try {
+    const u = new URL(url);
+    const match = u.pathname.match(/^\/package\/([@a-zA-Z0-9.-]+(?:\/[a-zA-Z0-9.-]+)?)/);
+    if (!match || !["npmjs.com", "www.npmjs.com"].includes(u.hostname)) return;
+    const pkg = match[1];
+    const res = await fetch(`https://registry.npmjs.org/${encodeURIComponent(pkg)}/latest`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return;
+    const data = await res.json() as { version?: string };
+    return data.version;
+  } catch {
+    return;
+  }
+}
+
 export class FetchError extends Error {
   code: string;
   status: number;
@@ -262,5 +286,90 @@ export class FetchError extends Error {
     this.code = code;
     this.status = status;
     this.name = "FetchError";
+  }
+}
+
+// ─── npm registry content fetch ───
+
+const NPM_PKG_RE = /^\/package\/([@a-zA-Z0-9.-]+(?:\/[a-zA-Z0-9.-]+)?)/;
+
+function isNpmUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return ["npmjs.com", "www.npmjs.com"].includes(u.hostname) && NPM_PKG_RE.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function extractNpmPkg(url: string): string | null {
+  try {
+    const match = new URL(url).pathname.match(NPM_PKG_RE);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchNpmContent(url: string): Promise<FetchResult | null> {
+  if (!isNpmUrl(url)) return null;
+  const pkg = extractNpmPkg(url);
+  if (!pkg) return null;
+
+  try {
+    const res = await fetch(
+      `https://registry.npmjs.org/${encodeURIComponent(pkg)}/latest`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as {
+      name?: string;
+      version?: string;
+      description?: string;
+      readme?: string;
+      license?: string;
+      homepage?: string;
+      keywords?: string[];
+    };
+
+    const title = data.name ?? pkg;
+    const version = data.version ?? "";
+    const desc = data.description ?? "";
+    const readme = data.readme ?? "";
+    const license = data.license ? `License: ${data.license}` : "";
+    const keywords = data.keywords?.length
+      ? `Keywords: ${data.keywords.join(", ")}`
+      : "";
+
+    const meta = [
+      `# ${title} v${version}`,
+      desc ? `\n${desc}\n` : "",
+      keywords ? `\n${keywords}` : "",
+      license ? `\n${license}` : "",
+      data.homepage ? `\nHomepage: ${data.homepage}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const content = readme ? `${meta}\n\n${readme}` : meta;
+    const hash = createHash("sha256").update(content).digest("hex");
+
+    return {
+      content,
+      contentType: "text/markdown",
+      isMarkdown: true,
+      isHtml: false,
+      hash,
+      meta: {
+        title: `${title} v${version}`,
+        version,
+        domain: "npmjs.com",
+        kind: "docs" as const,
+        author: pkg.startsWith("@") ? pkg.split("/")[0] : undefined,
+      },
+    };
+  } catch {
+    return null;
   }
 }

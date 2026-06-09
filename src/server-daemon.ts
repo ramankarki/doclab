@@ -14,6 +14,7 @@ import { Embedder } from "./lib/embedder";
 import { loadConfig, parseInterval, getDoclabDir } from "./config";
 import { initDb, closeDb, getDb, isVecLoaded } from "./db";
 import type { DlConfig } from "./types";
+import { c } from "./lib/colors";
 
 const DOCLAB_DIR = getDoclabDir();
 const LOGS_DIR = join(DOCLAB_DIR, "logs");
@@ -43,7 +44,7 @@ let shutdownSignal = false;
 async function main() {
   // ── Load config ──
   const { config, errors } = loadConfig();
-  for (const err of errors) log(`⚠ ${err}`);
+  for (const err of errors) log(`${c.warn}[WARN]${c.reset} ${err}`);
 
   // ── Initialize embedder ──
   let embedder: Embedder | null = null;
@@ -60,15 +61,15 @@ async function main() {
         embedder = e;
         ollamaStatus = "connected";
         embeddingDims = info.dimensions;
-        log(`✓ Ollama: connected (${info.model}, ${info.dimensions}d)`);
+        log(`${c.success}[OK]${c.reset} Ollama: connected (${info.model}, ${info.dimensions}d)`);
       } else {
         ollamaStatus = "unreachable";
-        log(`⚠ Ollama unreachable. Install: brew install ollama && ollama pull ${info.model}`);
+        log(`${c.warn}[WARN]${c.reset} Ollama unreachable. Install: brew install ollama && ollama pull ${info.model}`);
         log(`  Running in degraded mode (keyword search only).`);
       }
     } catch (e: any) {
       ollamaStatus = "unreachable";
-      log(`⚠ Ollama check failed: ${e.message}`);
+      log(`${c.warn}[WARN]${c.reset} Ollama check failed: ${e.message}`);
     }
   } else if (config.embedding.provider === "openai" || config.embedding.provider === "voyage") {
     const e = new Embedder(config.embedding);
@@ -79,14 +80,14 @@ async function main() {
         embedder = e;
         ollamaStatus = "connected";
         embeddingDims = info.dimensions;
-        log(`✓ ${config.embedding.provider}: connected (${info.model}, ${info.dimensions}d)`);
+        log(`${c.success}[OK]${c.reset} ${config.embedding.provider}: connected (${info.model}, ${info.dimensions}d)`);
       } else {
         ollamaStatus = "unreachable";
-        log(`⚠ ${config.embedding.provider}: API key not set. Embedding disabled.`);
+        log(`${c.warn}[WARN]${c.reset} ${config.embedding.provider}: API key not set. Embedding disabled.`);
       }
     } catch (e: any) {
       ollamaStatus = "unreachable";
-      log(`⚠ ${config.embedding.provider}: ${e.message}`);
+      log(`${c.warn}[WARN]${c.reset} ${config.embedding.provider}: ${e.message}`);
     }
   }
 
@@ -96,9 +97,9 @@ async function main() {
   else await initDb();
 
   if (isVecLoaded()) {
-    log("✓ sqlite-vec: loaded");
+    log(`${c.success}[OK]${c.reset} sqlite-vec: loaded`);
   } else {
-    log("⚠ sqlite-vec not loaded — vector search disabled");
+    log(`${c.warn}[WARN]${c.reset} sqlite-vec not loaded — vector search disabled`);
   }
 
   // ── Build state ──
@@ -120,7 +121,7 @@ async function main() {
   writeFileSync(PORT_FILE, String(port));
   writeFileSync(PID_FILE, String(process.pid));
 
-  log(`✓ Ready on http://127.0.0.1:${port}`);
+  log(`${c.success}[OK]${c.reset} Ready on http://127.0.0.1:${port}`);
 
   // ── Start idle timer ──
   resetIdleTimer(config);
@@ -133,8 +134,8 @@ async function main() {
 
   // ── Print setup hint ──
   if (config.sources.length === 0) {
-    log("⚠ No sources configured. Add some:");
-    log("  doclab add https://hono.dev/llms-full.txt");
+    log(`${c.warn}[WARN]${c.reset} No sources configured. Add some:`);
+    log(`  ${c.cmd}doclab add${c.reset} https://hono.dev/llms-full.txt`);
   }
 
   // ── Graceful shutdown ──
@@ -142,7 +143,7 @@ async function main() {
     if (shutdownSignal) return;
     shutdownSignal = true;
 
-    log("[doclab] Shutting down...");
+    log(`${c.info}[doclab]${c.reset} Shutting down...`);
     if (idleTimer) clearTimeout(idleTimer);
     if (rebuildTimer) clearInterval(rebuildTimer);
 
@@ -168,7 +169,7 @@ function resetIdleTimer(config: DlConfig) {
   if (timeoutMs === 0) return; // 'never'
 
   idleTimer = setTimeout(() => {
-    log(`[doclab] Idle timeout (${config.idleTimeout}). Shutting down.`);
+    log(`${c.info}[doclab]${c.reset} Idle timeout (${config.idleTimeout}). Shutting down.`);
     process.kill(process.pid, "SIGTERM");
   }, timeoutMs);
 }
@@ -193,7 +194,7 @@ async function runOverdueRebuild(config: DlConfig) {
 
   if (overdue.length > 0) {
     const names = overdue.map((s) => s.name).join(", ");
-    log(`[doclab] Rebuild overdue for ${overdue.length} source(s): ${names}. Running pull...`);
+    log(`${c.info}[doclab]${c.reset} Rebuild overdue for ${overdue.length} source(s): ${names}. Running pull...`);
 
     const port = readPort();
     if (!port) return;
@@ -204,9 +205,9 @@ async function runOverdueRebuild(config: DlConfig) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      log(`[doclab] Overdue rebuild complete.`);
+      log(`${c.success}[doclab]${c.reset} Overdue rebuild complete.`);
     } catch (e: any) {
-      log(`[doclab] Overdue rebuild error: ${e.message}`);
+      log(`${c.error}[doclab]${c.reset} Overdue rebuild error: ${e.message}`);
     }
   }
 }
@@ -215,11 +216,11 @@ function startRebuildTimer(config: DlConfig) {
   const intervalMs = parseInterval(config.rebuildInterval);
   if (intervalMs === 0) return; // 'never'
 
-  log(`Auto-rebuild: every ${config.rebuildInterval}`);
+  log(`${c.dim}Auto-rebuild: every ${config.rebuildInterval}${c.reset}`);
 
   rebuildTimer = setInterval(async () => {
     if (!state) return;
-    log(`[doclab] Auto-rebuild: checking ${state.config.sources.length} source(s)...`);
+    log(`${c.info}[doclab]${c.reset} Auto-rebuild: checking ${state.config.sources.length} source(s)...`);
 
     // Call pullSources via HTTP to use the same pipeline
     const port = readPort();
@@ -234,11 +235,11 @@ function startRebuildTimer(config: DlConfig) {
       if (resp.ok) {
         const data = await resp.json();
         if (data.updated?.length > 0) {
-          log(`[doclab] Auto-rebuild: updated ${data.updated.join(", ")}`);
+          log(`${c.success}[doclab]${c.reset} Auto-rebuild: updated ${data.updated.join(", ")}`);
         }
       }
     } catch (e: any) {
-      log(`[doclab] Auto-rebuild error: ${e.message}`);
+      log(`${c.error}[doclab]${c.reset} Auto-rebuild error: ${e.message}`);
     }
   }, intervalMs);
 }

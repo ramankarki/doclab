@@ -167,25 +167,25 @@ Global install. One daemon, all projects share it.
 
 ```
 $ doclab start                          # first run: no config yet
-✓ sqlite-vec: loaded
-✓ Ollama: connected (nomic-embed-text, 768d)
-⚠ No sources configured. Add some:
+[OK] sqlite-vec: loaded
+[OK] Ollama: connected (nomic-embed-text, 768d)
+[WARN] No sources configured. Add some:
   doclab add https://hono.dev/llms-full.txt
   doclab add https://orm.drizzle.team/llms-full.txt
   doclab add https://some-blog.com/react-patterns
-✓ Ready on http://127.0.0.1:8475
+[OK] Ready on http://127.0.0.1:8475
 
 $ doclab add https://hono.dev/llms-full.txt
 Fetching... 842 KB (done)
 ✂️ Chunked: 312 sections
 Embedding 312 chunks... ████████████ 100% (12s)
-✓ Added "hono" — 312 chunks indexed
+Added "hono" — 312 chunks indexed
 
 $ doclab add https://overreacted.io/why-do-hooks-rely-on-call-order/
 Fetching... 45 KB (done)
 ✂️ Chunked: 8 sections
 Embedding 8 chunks... ████████████ 100% (<1s)
-✓ Added "overreacted-why-do-hooks" — 8 chunks indexed
+Added "overreacted-why-do-hooks" — 8 chunks indexed
 
 $ doclab search "react hooks call order"
 1. overreacted-why-do-hooks (distance: 0.08)
@@ -211,11 +211,14 @@ doclab rebuild                      # drop everything, re-index from scratch
 
 ```
 $ doclab list
-Sources (4):
-  hono                          v4.6.5     312 chunks   fetched 3h ago    docs
-  drizzle                       v0.38.0    421 chunks   fetched 3h ago    docs
-  better-auth                   v1.2.0     204 chunks   fetched 1d ago  ⚠ docs
-  overreacted-why-do-hooks            —       8 chunks   fetched 3h ago    article
+NAME                    URL                                          CHUNKS  FETCHED
+──────────────────────────────────────────────────────────────────────────────────
+hono                    https://hono.dev/llms-full.txt                   312  3h ago
+drizzle                 https://orm.drizzle.team/llms-full.txt          421  3h ago
+better-auth             https://better-auth.dev/llms-full.txt           204  1d ago ⚠
+overreacted-why-do-hooks  https://overreacted.io/why-do-hooks-rely...    8  3h ago
+
+total: 4
 ```
 
 ### 3.5 CLI Surface (Full)
@@ -233,7 +236,46 @@ doclab search <query> [--source <n>] [--topK <k>]  # hybrid search
 doclab init                     # generate AGENTS.md snippet
 ```
 
-### 3.6 `doclab status` Output
+### 3.6 CLI Output Style
+
+doclab uses a semantic color design system (zero dependencies, ANSI escape codes).
+
+**Design tokens** (`src/lib/colors.ts`):
+
+| Token | Color | Usage |
+|-------|-------|-------|
+| `c.heading` | bold cyan | Table headers, section titles |
+| `c.cmd` | cyan | Command names, executable references |
+| `c.arg` | dim | Argument placeholders in help |
+| `c.success` | green | OK, Ready, Added, Updated, Complete |
+| `c.error` | red | Failed, errors, fatal |
+| `c.warn` | yellow | Warnings, stale indicator, unreachable |
+| `c.dim` | dim | Separators, total line, secondary info |
+| `c.info` | cyan | Daemon lifecycle (rebuild, shutdown) |
+| `c.label` | dim | Status labels (Daemon:, Ollama:, etc.) |
+| `c.highlight` | bold | Important values, Search: label |
+| `c.muted` | gray | De-emphasized text |
+
+**Rules:**
+- NO_COLOR env or non-TTY → all codes stripped (clean in CI/pipes)
+- Log files are always plain text (no ANSI codes written to disk)
+- Errors route to stderr (`console.error`) with `c.error` styling
+- Success messages use `c.success`, warnings use `c.warn`
+- Server logs prefix with `[OK]` (green) or `[WARN]` (yellow)
+
+**`list` command table format:**
+```
+NAME             URL                              VERSION   CHUNKS  FETCHED
+───────────────────────────────────────────────────────────────────────────
+react-docs       https://react.dev/reference/...  v19.0         42  2h ago
+hono             https://hono.dev/llms-full.txt   —             15  never
+svelte-kit       https://kit.svelte.dev/docs/...  v4.5           8  3d ago ⚠
+
+total: 3
+```
+Columns auto-sized. URL capped at 50 chars with … truncation. Stale rows (fetched > rebuildInterval) show yellow ⚠.
+
+### 3.7 `doclab status` Output
 
 ```
 $ doclab status
@@ -253,18 +295,18 @@ Daemon: not running
   Start with: doclab start
 ```
 
-### 3.7 Auto-Start
+### 3.8 Auto-Start
 
 ```
 $ doclab search "hono cors"          # daemon not running? auto-starts
-Starting doclab daemon... ✓
-✓ Ready on http://127.0.0.1:8475
+Starting doclab daemon...
+Ready on http://127.0.0.1:8475
 [search results...]
 ```
 
 Any query command auto-starts the daemon if it's not running.
 
-### 3.8 Stop
+### 3.9 Stop
 
 ```
 doclab stop
@@ -272,19 +314,19 @@ doclab stop
 
 Server also auto-shuts down after 30 minutes idle (configurable in `dlconfig.json`).
 
-### 3.9 Startup Sequence
+### 3.10 Startup Sequence
 
 When `doclab start` is called:
 
 ```
 1. Check if daemon already running
    → Read ~/.doclab/port and ~/.doclab/pid
-   → If port file exists AND process alive: ✓ Already running on :8475 (exit 0)
+   → If port file exists AND process alive: Already running on :8475 (exit 0)
    → If port file exists but process dead: clean up stale files, continue
 
 2. Config validation
    → Load ~/.doclab/dlconfig.json
-   → Validate sources, embedding config, intervals (see §3.9)
+   → Validate sources, embedding config, intervals (see §3.11)
    → If invalid: print error, exit 1
    → If config missing (first run): create empty config, print setup hint, continue
 
@@ -297,7 +339,7 @@ When `doclab start` is called:
 
 4. Ollama check
    → Ping http://localhost:11434/api/tags
-   → If reachable AND embedding model found: ✓ Ollama: connected (model, dims)
+   → If reachable AND embedding model found: [OK] Ollama: connected (model, dims)
    → If reachable but model not pulled: warn, print pull command, degraded mode
    → If unreachable: warn, degraded mode (keyword search only)
    → If embedding provider is openai/voyage: check API key, warn if missing
@@ -310,8 +352,8 @@ When `doclab start` is called:
 
 6. Parent waits for child to bind
    → Poll http://127.0.0.1:{port}/health (max 10s, 200ms intervals)
-   → On success: ✓ Ready on http://127.0.0.1:8475
-   → On timeout: ✗ Daemon failed to start, check logs
+   → On success: Ready on http://127.0.0.1:8475
+   → On timeout: Daemon failed to start, check logs
    → Parent exits, child runs in background
 
 7. Daemon indexes unbuilt sources (background)
@@ -325,7 +367,7 @@ When `doclab start` is called:
 
 **Subsequent starts:** All steps are idempotent. Step 1 catches existing daemon, exits immediately.
 
-### 3.10 Config Validation
+### 3.11 Config Validation
 
 On startup, `~/.doclab/dlconfig.json` is validated:
 
@@ -345,13 +387,13 @@ On startup, `~/.doclab/dlconfig.json` is validated:
 
 **Error format:**
 ```
-✗ dlconfig.json: Source 'missing-docs' has no 'url' field.
+dlconfig.json: Source 'missing-docs' has no 'url' field.
   Fix: Add a 'url' field or remove the source with 'doclab remove missing-docs'.
 ```
 
 Validation runs on startup AND on `doclab add` (before committing to config). Invalid `add` is rejected before any fetch.
 
-### 3.11 Concurrency & Locking
+### 3.12 Concurrency & Locking
 
 SQLite in WAL mode handles concurrent reads natively. Writes are serialized.
 
@@ -364,7 +406,7 @@ SQLite in WAL mode handles concurrent reads natively. Writes are serialized.
 
 **Write lock:** A single in-memory mutex (`isWriting` flag) gates all write operations (pull, rebuild, add, remove). If a write is in progress, subsequent write requests get HTTP 409 Conflict. Reads are never blocked.
 
-### 3.12 Daemon Lifecycle
+### 3.13 Daemon Lifecycle
 
 ```
 Daemon started (Bun.spawn child process)
@@ -528,10 +570,10 @@ On rebuild schedule (every 24h):
     → If 200 + content changed → re-chunk, re-embed, update metadata
     → If 200 + unchanged → skip, update fetchedAt
     → If 404/410 → source is dead → delete chunks, remove from config
-      print: "⚠ hono: URL returned 404. Source removed."
+      print: "hono: URL returned 404. Source removed."
     → If connection error → mark stale, retry next cycle
       after 3 consecutive failures → remove
-      print: "⚠ some-blog: unreachable 3 times. Source removed."
+      print: "some-blog: unreachable 3 times. Source removed."
 
 doclab remove <name>
   → Delete chunks → Remove from config
@@ -628,7 +670,7 @@ Page with no headers at all (rare, bad HTML):
   → Split on paragraph breaks (\n\n+)
   → Merge adjacent fragments < 200 chars
   → Code fences stay whole
-  → Warn: "⚠ no headers found — paragraph-level chunking, search precision may vary"
+  → Warn: "no headers found — paragraph-level chunking, search precision may vary"
 ```
 
 ### 5.5 Chunk Data Structure
@@ -716,7 +758,7 @@ Chunk 2: "Then create your schema file..." (explanation + 10-line code block, ~5
 Chunk 3: "Finally, run the migration..." (closing paragraph, ~100 chars)
 ```
 
-⚠ Warning printed: "weak chunk boundaries — search quality may vary"
+Warning printed: "weak chunk boundaries — search quality may vary"
 
 ### 5.7 Example: Recursive h2 → h3 Splitting
 
@@ -960,7 +1002,7 @@ Fast. No embedding needed. Works in degraded mode.
 ```
 $ doclab search "hono cors middleware"
 
-─── doclab search: "hono cors middleware" (3 results) ───
+Search: "hono cors middleware" (3 results, 42ms)
 
 1. hono.dev — Hono > Middleware > CORS (distance: 0.12, fusion: 0.042) [docs]
    ```ts
@@ -971,15 +1013,15 @@ $ doclab search "hono cors middleware"
      allowMethods: ['GET', 'POST'],
    }))
    ```
-   ► hono v4.6.5, fetched 2026-06-08
+   hono v4.6.5, fetched 2026-06-08
 
 2. hono.dev — Hono > Middleware > Access Control (distance: 0.18, fusion: 0.028) [docs]
    Access control headers and CORS configuration options for Hono applications.
-   ► hono v4.6.5, fetched 2026-06-08
+   hono v4.6.5, fetched 2026-06-08
 
 3. dev.to — CORS in Modern Web Frameworks (distance: 0.22, fusion: 0.019) [article]
    Comparing CORS setup across Hono, Express, and Fastify...
-   ► dev.to, fetched 2026-06-07
+   dev.to, fetched 2026-06-07
 ```
 
 ### 7.5 Source Filtering
@@ -1250,10 +1292,14 @@ doclab remove <name>  # delete source immediately
 
 ```
 $ doclab list
-Sources (4):
-  hono                    v4.6.5   312 chunks   fetched 3h ago    docs
-  drizzle                 v0.38.0  421 chunks   fetched 3h ago    docs
-  better-auth             v1.2.0   204 chunks   fetched 30h ago ⚠ docs
+NAME                    URL                                          CHUNKS  FETCHED
+──────────────────────────────────────────────────────────────────────────────────
+hono                    https://hono.dev/llms-full.txt                   312  3h ago
+drizzle                 https://orm.drizzle.team/llms-full.txt          421  3h ago
+better-auth             https://better-auth.dev/llms-full.txt           204  30h ago ⚠
+
+total: 3
+```
   overreacted-hooks          —       8 chunks   fetched 3h ago    article
 ```
 
