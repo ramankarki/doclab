@@ -16,7 +16,7 @@
  */
 
 import { join } from 'node:path';
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { getDoclabDir, loadConfig, isValidUrl } from './config';
 import type {
@@ -79,6 +79,10 @@ async function main() {
       break;
     case 'init':
       await cmdInit();
+      break;
+    case 'mem':
+    case 'memory':
+      await cmdMem();
       break;
     default:
       console.log(`${c.red}Unknown command:${c.reset} ${command}`);
@@ -451,6 +455,73 @@ async function cmdInit() {
   );
 }
 
+async function cmdMem() {
+  const pid = readPid();
+  const dbPath = join(DOCLAB_DIR, 'doclab.db');
+  const logsDir = join(DOCLAB_DIR, 'logs');
+
+  // Daemon memory (via ps)
+  if (pid) {
+    try {
+      const proc = spawn('ps', ['-o', 'rss=', '-p', String(pid)], {
+        stdio: 'pipe',
+      });
+      const out = await new Promise<string>((resolve) => {
+        let data = '';
+        proc.stdout.on('data', (chunk: Buffer) => (data += chunk.toString()));
+        proc.stdout.on('end', () => resolve(data));
+      });
+      const rssKB = parseInt(out.trim()) || 0;
+      if (rssKB > 0) {
+        console.log(`${c.heading}Daemon (pid: ${pid})${c.reset}`);
+        console.log(`${c.label}RSS:${c.reset}  ${formatKB(rssKB)}`);
+      }
+    } catch {
+      console.log(`${c.warn}Daemon not running${c.reset}`);
+    }
+  } else {
+    console.log(`${c.warn}Daemon not running (no pid file)${c.reset}`);
+  }
+
+  // CLI process memory
+  const cliMem = process.memoryUsage();
+  console.log(`${c.heading}CLI (pid: ${process.pid})${c.reset}`);
+  console.log(`${c.label}RSS:${c.reset}  ${formatBytes(cliMem.rss)}`);
+  console.log(`${c.label}Heap:${c.reset} ${formatBytes(cliMem.heapUsed)} / ${formatBytes(cliMem.heapTotal)}`);
+
+  // Database file size
+  if (existsSync(dbPath)) {
+    const { size } = await Bun.file(dbPath).stat();
+    console.log(`${c.heading}Database${c.reset}`);
+    console.log(`${c.label}DB:${c.reset}    ${formatBytes(size)} ${c.dim}(${dbPath})${c.reset}`);
+  }
+
+  // Logs directory size
+  if (existsSync(logsDir)) {
+    const logSize = await dirSize(logsDir);
+    if (logSize > 0) {
+      console.log(`${c.label}Logs:${c.reset}   ${formatBytes(logSize)} ${c.dim}(${logsDir})${c.reset}`);
+    }
+  }
+
+  // Ollama / vector index estimate
+  const port = readPort();
+  if (port && (await isDaemonRunning(port))) {
+    const health = await apiGet<HealthResponse>(port, '/health');
+    if (health?.embeddingDims && health.chunks) {
+      const vecBytes = health.embeddingDims * 4 * health.chunks;
+      console.log(`${c.label}Vec idx:${c.reset} ${formatBytes(vecBytes)} ${c.dim}(${health.embeddingDims}d × ${health.chunks} chunks)${c.reset}`);
+    }
+  }
+
+  console.log();
+  console.log(`${c.dim}${'─'.repeat(40)}${c.reset}`);
+  const daemonRSS = pid ? await getDaemonRSS(pid) : 0;
+  const totalRSS = daemonRSS + cliMem.rss;
+  const label = pid ? `${c.dim}(daemon + CLI)${c.reset}` : `${c.dim}(CLI only)${c.reset}`;
+  console.log(`${c.bold}Total RSS:${c.reset} ${formatBytes(totalRSS)} ${label}`);
+}
+
 // ─── Daemon helpers ───
 
 function readPort(): number | null {
@@ -625,6 +696,51 @@ function formatDuration(ms: number): string {
   return `${Math.floor(ms / 1000)}s`;
 }
 
+function formatKB(kb: number): string {
+  return formatBytes(kb * 1024);
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
+
+async function getDaemonRSS(pid: number): Promise<number> {
+  try {
+    const proc = spawn('ps', ['-o', 'rss=', '-p', String(pid)], {
+      stdio: 'pipe',
+    });
+    const out = await new Promise<string>((resolve) => {
+      let data = '';
+      proc.stdout.on('data', (chunk: Buffer) => (data += chunk.toString()));
+      proc.stdout.on('end', () => resolve(data));
+    });
+    return (parseInt(out.trim()) || 0) * 1024;
+  } catch {
+    return 0;
+  }
+}
+
+async function dirSize(dirPath: string): Promise<number> {
+  try {
+    const entries = readdirSync(dirPath);
+    let total = 0;
+    for (const entry of entries) {
+      const fullPath = join(dirPath, entry);
+      try {
+        const s = statSync(fullPath);
+        if (s.isFile()) total += s.size;
+        else if (s.isDirectory()) total += await dirSize(fullPath);
+      } catch {}
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
 function parseIntervalStr(interval: string): number {
   if (interval === 'never') return 0;
   const match = interval.match(/^(\d+)(h|m|d)$/);
@@ -667,9 +783,11 @@ function printHelp() {
   console.log(`${c.dim}Usage:${c.reset} ${c.bold}doclab${c.reset} ${c.dim}<command>${c.reset} ${c.dim}[...flags]${c.reset} ${c.dim}[...args]${c.reset}
 `);
   console.log(`${c.bold}Commands:${c.reset}`);
+  console.log(`  ${c.cyan}help${c.reset}                       ${c.dim}Show this help${c.reset}`);
   console.log(`  ${c.cyan}start${c.reset}                     ${c.dim}Start global daemon (idempotent)${c.reset}`);
   console.log(`  ${c.cyan}stop${c.reset}                      ${c.dim}Stop daemon${c.reset}`);
   console.log(`  ${c.cyan}status${c.reset}                    ${c.dim}Daemon status${c.reset}`);
+  console.log(`  ${c.cyan}mem | memory${c.reset}              ${c.dim}Real-time memory usage${c.reset}`);
   console.log(`  ${c.cyan}add${c.reset} ${c.dim}<url>${c.reset} ${c.dim}[--name <n>]${c.reset}    ${c.dim}Add source: fetch → chunk → embed${c.reset}`);
   console.log(`  ${c.cyan}remove | rm${c.reset} ${c.dim}<name>${c.reset}         ${c.dim}Remove source${c.reset}`);
   console.log(`  ${c.cyan}list${c.reset}                      ${c.dim}List all sources with freshness${c.reset}`);
