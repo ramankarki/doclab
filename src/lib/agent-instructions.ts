@@ -15,7 +15,7 @@ doclab first. Guesswork produces broken code.
 | Command | Purpose |
 |---------|---------|
 | \`doclab search "<query>"\` | Search indexed docs (hybrid: vector + keyword) |
-| \`doclab search "<q>" --source <name>\` | Filter by source |
+| \`doclab search "<q>" --source <name>\` | Filter by source (CRITICAL: use when multiple sources match keywords) |
 | \`doclab search "<q>" --kind <kind>\` | Filter by kind (docs/article/tutorial/reference) |
 | \`doclab search "<q>" --topK <n>\` | Return more results (default 5) |
 | \`doclab list\` | List all indexed sources |
@@ -58,9 +58,24 @@ Query doclab BEFORE:
 doclab search "hono cors middleware setup"
 doclab search "drizzle sqlite schema definition" --source drizzle
 doclab search "stripe webhook signature verification"
-doclab search "better auth session management"
+doclab search "better auth session management" --source better-auth
 doclab search "react hooks pattern" --kind article
 doclab search "tanstack query useQuery options" --source tanstack
 \`\`\`
+
+### Source filter — when to use
+
+When multiple sources share keywords (e.g., "hono" appears in both Hono docs and Better Auth integration guides), unfiltered searches may favor the larger source. Always use \`--source\` when you know which package's docs you need:
+
+\`\`\`bash
+# Bad: "better auth hono middleware" → Hono docs dominate (424 chunks say "hono")
+# Good: target the right source
+doclab search "hono middleware" --source better-auth
+doclab search "drizzle adapter" --source better-auth
+\`\`\`
+
+### llms.txt sources
+
+doclab auto-expands \`llms.txt\` files (table of contents) into full documentation. Adding \`https://better-auth.com/llms.txt\` indexes ALL linked sub-pages — equivalent to llms-full.txt. No special handling needed.
 `
 }

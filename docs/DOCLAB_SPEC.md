@@ -496,6 +496,29 @@ Fetch URL
   → Everything else → error: "Unsupported content type: ..."
 ```
 
+### 4.2.1 llms.txt Expansion
+
+[llms.txt](https://llmstxt.org/) files are curated tables of contents — link directories pointing to sub-pages with the actual documentation. doclab detects these automatically and expands them into full documentation.
+
+**Detection:** Any URL whose pathname ends with `/llms.txt` triggers expansion. Query parameters and hash fragments are ignored.
+
+**Expansion flow:**
+```
+1. Fetch llms.txt → extract all relative markdown links [label](/path/to/page.md)
+2. Resolve links to absolute URLs (same domain only, skip external/anchor-only)
+3. Fetch every sub-page (concurrency: 5), convert HTML to markdown
+4. Concatenate all sub-pages into one document (llms-full.txt equivalent)
+5. Chunk the concatenated document normally (h2/h3 → semantic chunks)
+```
+
+**Partial failures:** If some sub-pages fail to fetch (404, timeout), a warning is logged and successful pages are indexed. Only when ALL sub-pages fail is the source rejected entirely.
+
+**Retry:** Each sub-page fetch retries up to 3 times with exponential backoff (1s, 2s) on transient errors (429, 502, 503, connection refused). Jina AI fallback after retries exhausted for eligible status codes.
+
+**CLI prompt:** After adding a non-llms.txt URL, doclab probes the domain for `llms-full.txt` and `llms.txt`. If found, it prompts: "Found full docs at <url>. Add them too? (y/N)"
+
+**Result:** Adding `https://better-auth.com/llms.txt` indexes ~1800+ chunks of real documentation — identical in result to adding an `llms-full.txt` file, just with more HTTP requests.
+
 ### 4.3 HTML → Markdown Conversion
 
 Purpose: normalize to markdown so chunking works uniformly.

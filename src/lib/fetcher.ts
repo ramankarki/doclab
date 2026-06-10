@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { SourceMeta, SourceKind } from '../types'
+import { htmlToMarkdown } from './html-to-md'
+import { extractContent } from './readability-extract'
 
 export interface FetchResult {
   content: string
@@ -12,7 +14,10 @@ export interface FetchResult {
 
 const JINA_BASE = 'https://r.jina.ai/'
 
-// Status codes that trigger Jina AI fallback
+// Status codes that trigger retry (transient failures)
+const RETRY_STATUSES = new Set([429, 502, 503])
+
+// Status codes that trigger Jina AI fallback (after retries exhausted)
 const FALLBACK_STATUSES = new Set([403, 429, 502, 503])
 
 // Patterns suggesting bot-detection pages (only checked on HTML responses)
@@ -29,23 +34,41 @@ export async function fetchUrl(url: string, jinaApiKey?: string): Promise<FetchR
   const npmContent = await fetchNpmContent(url)
   if (npmContent) return npmContent
 
-  // Try direct fetch first
-  try {
-    const result = await directFetch(url)
-    return result
-  } catch (e: any) {
-    if (e instanceof FetchError && e.status === 404) {
-      throw e // 404 is permanent — don't fallback
+  // Try direct fetch with retry on transient errors
+  let lastError: any
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const result = await directFetch(url)
+      return result
+    } catch (e: any) {
+      lastError = e
+      if (e instanceof FetchError && e.status === 404) {
+        throw e // 404 is permanent — don't retry or fallback
+      }
+      if (e instanceof FetchError && RETRY_STATUSES.has(e.status) && attempt < 2) {
+        const delay = Math.pow(2, attempt) * 1000 // 1s, 2s
+        await new Promise((r) => setTimeout(r, delay))
+        continue
+      }
+      // Connection errors also retry
+      if ((e.name === 'FetchError' || e.cause?.code === 'ECONNREFUSED') && attempt < 2) {
+        const delay = Math.pow(2, attempt) * 1000
+        await new Promise((r) => setTimeout(r, delay))
+        continue
+      }
+      break
     }
-    if (e instanceof FetchError && FALLBACK_STATUSES.has(e.status)) {
-      return await jinaFetch(url, jinaApiKey)
-    }
-    // Connection errors also trigger fallback
-    if (e.name === 'FetchError' || e.cause?.code === 'ECONNREFUSED') {
-      return await jinaFetch(url, jinaApiKey)
-    }
-    throw e
   }
+
+  // Retries exhausted — try Jina fallback for fallback-eligible statuses
+  if (lastError instanceof FetchError && FALLBACK_STATUSES.has(lastError.status)) {
+    return await jinaFetch(url, jinaApiKey)
+  }
+  if (lastError?.name === 'FetchError' || lastError?.cause?.code === 'ECONNREFUSED') {
+    return await jinaFetch(url, jinaApiKey)
+  }
+
+  throw lastError
 }
 
 async function directFetch(url: string): Promise<FetchResult> {
@@ -245,6 +268,7 @@ export async function fetchAndConcat(
   concurrency = 5
 ): Promise<string> {
   const total = urls.length
+  if (total === 0) return ''
   const results: string[] = new Array(total)
   const failed: { url: string; error: string }[] = []
 
@@ -257,7 +281,13 @@ export async function fetchAndConcat(
         const fileName = u.split('/').pop() || u
         process.stderr.write(`[${idx + 1}/${total}] Fetching ${fileName}...\n`)
         const result = await fetchUrl(u, jinaApiKey)
-        results[idx] = result.content
+        // Convert HTML sub-pages to markdown before concatenating
+        if (result.isHtml && !result.isMarkdown) {
+          const cleanedHtml = extractContent(result.content)
+          results[idx] = htmlToMarkdown(cleanedHtml)
+        } else {
+          results[idx] = result.content
+        }
       })
     )
 
@@ -271,12 +301,20 @@ export async function fetchAndConcat(
 
   if (failed.length > 0) {
     const names = failed.map((f) => f.url.split('/').pop() || f.url).join(', ')
-    throw new Error(
-      `Failed to index: ${failed.length}/${total} pages could not be fetched (${names})`
+    console.warn(
+      `[doclab] Warning: ${failed.length}/${total} sub-pages could not be fetched (${names})`
     )
   }
 
-  return results.join('\n\n')
+  // Return successfully fetched pages only
+  const succeeded = results.filter((r): r is string => r != null)
+  if (succeeded.length === 0) {
+    throw new Error(
+      `Failed to index: all ${total} pages could not be fetched (${failed.map((f) => f.url.split('/').pop() || f.url).join(', ')})`
+    )
+  }
+
+  return succeeded.join('\n\n')
 }
 
 export function extractRelativeLinks(content: string, baseUrl: string): string[] {

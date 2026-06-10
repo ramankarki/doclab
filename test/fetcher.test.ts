@@ -15,13 +15,43 @@ describe('fetchAndConcat', () => {
     expect(result).toBe('')
   })
 
-  test('throws all-or-nothing error when any URL fails', async () => {
+  test('warns on partial failure, returns successful pages', async () => {
+    // Non-existent port + a working server
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const url = new URL(req.url)
+        if (url.pathname === '/ok.md') {
+          return new Response('# OK', {
+            headers: { 'Content-Type': 'text/markdown' }
+          })
+        }
+        return new Response('Not Found', { status: 404 })
+      }
+    })
+
     try {
-      await fetchAndConcat(['http://127.0.0.1:19999/nope.md'])
+      const base = `http://127.0.0.1:${server.port}`
+      const result = await fetchAndConcat([
+        `${base}/ok.md`,
+        'http://127.0.0.1:19999/nope.md',
+        `${base}/ok.md`
+      ])
+      // Returns successful pages, skip failures
+      expect(result).toContain('# OK')
+      // Warning logged to stderr (can't easily assert, but no throw)
+    } finally {
+      server.stop()
+    }
+  })
+
+  test('throws only when ALL pages fail', async () => {
+    try {
+      await fetchAndConcat(['http://127.0.0.1:19999/a.md', 'http://127.0.0.1:19999/b.md'])
       expect(false).toBe(true)
     } catch (e: any) {
-      expect(e.message).toContain('Failed to index:')
-      expect(e.message).toContain('nope.md')
+      expect(e.message).toContain('all')
+      expect(e.message).toContain('pages could not be fetched')
     }
   })
 

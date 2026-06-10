@@ -7,10 +7,18 @@ Agents write stale code because their training data is old. **doclab** gives the
 ```bash
 bun add -g doclab
 doclab start
+
+# Add docs via llms.txt (auto-expands to full documentation)
+doclab add https://better-auth.com/llms.txt
 doclab add https://hono.dev/llms-full.txt
+
+# Or any URL — blog posts, guides, API references
 doclab add https://orm.drizzle.team/llms-full.txt
+
 doclab search "hono cors middleware setup"
 ```
+
+**llms.txt vs llms-full.txt:** doclab automatically detects llms.txt (table of contents) files and expands them — it follows every linked sub-page, fetches them all, concatenates into one document, then chunks. You get the full documentation, not just a link list. No special flags needed.
 
 No Ollama? No problem — keyword search works without it. Install Ollama for hybrid vector + keyword search.
 
@@ -156,6 +164,58 @@ doclab accepts any URL with technical content:
 HTML pages are automatically converted to clean markdown. First through Mozilla's Readability (content extraction — strips nav, ads, sidebars), then through a custom markdown converter that preserves code fences, headings, and links.
 
 If a page is Cloudflare-protected (Medium, some docs sites), doclab automatically falls back to Jina AI's reader proxy which returns clean markdown directly.
+
+## Best Practices
+
+### Choosing between llms.txt and llms-full.txt
+
+| Format | Behavior | Use when |
+|--------|----------|----------|
+| `llms-full.txt` | Single file, chunked directly | Available. Preferred — faster, single fetch. |
+| `llms.txt` | TOC → auto-follows all sub-pages → concatenates → chunks | `llms-full.txt` not available. Works identically after expansion. |
+| Any URL | Fetched, HTML converted to markdown, chunked | Blog posts, guides, API references. |
+
+**After adding an llms.txt source**, doclab prompts if `llms-full.txt` exists at the same domain — you can add it too for faster re-indexing.
+
+### Writing effective search queries
+
+```bash
+# Include the framework/library name — narrows results
+doclab search "hono cors middleware setup"
+
+# Use --source filter when you know which docs to target
+doclab search "drizzle adapter" --source better-auth
+doclab search "accordion" --source shadcn
+
+# Use --kind filter to exclude articles when looking for API docs
+doclab search "hooks pattern" --kind docs
+
+# Increase result count for broad searches
+doclab search "deployment" --topK 10
+```
+
+### Source management
+
+```bash
+# Check freshness — stale sources show ⚠
+doclab list
+
+# Re-fetch all sources (pull changed content)
+doclab pull
+
+# Rebuild everything from scratch (if chunks seem wrong)
+doclab rebuild
+
+# Remove dead sources
+doclab remove <name>
+```
+
+### Agent workflow
+
+1. **Before coding:** `doclab search "<topic>"` — verify APIs exist
+2. **Missing docs:** `doclab add <url>` — index new sources on the fly
+3. **Stale docs:** `doclab pull` — refresh before deploying
+4. **Source filter:** `--source <name>` — when cross-source overlap hides results
 
 ## Agent Integration
 

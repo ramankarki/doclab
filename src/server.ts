@@ -350,22 +350,28 @@ async function addSource(
   // Expand llms.txt TOC: extract sub-page links, fetch & concatenate
   if (isLlmsTxtUrl(url)) {
     const links = extractRelativeLinks(fetched.content, url)
-    if (links.length > 0) {
-      console.log(
-        `${c.info}[doclab]${c.reset} Expanding llms.txt: ${links.length} sub-pages...`
+    if (links.length === 0) {
+      // llms.txt with no extractable links — useless TOC, abort
+      throw new FetchError(
+        `No documentation links found in llms.txt for ${name}. Nothing to index.`,
+        'LLMS_TXT_NO_LINKS',
+        0
       )
-      try {
-        const expanded = await fetchAndConcat(links, state.config.jinaApiKey)
-        mdContent = expanded
-        fetched.meta.isLlmsTxt = true
-      } catch (e: any) {
-        // All-or-nothing: abort the entire add
-        throw new FetchError(
-          `Failed to index ${name}: ${e.message}`,
-          'LLMS_TXT_EXPAND_FAILED',
-          0
-        )
-      }
+    }
+    console.log(
+      `${c.info}[doclab]${c.reset} Expanding llms.txt: ${links.length} sub-pages...`
+    )
+    try {
+      const expanded = await fetchAndConcat(links, state.config.jinaApiKey)
+      mdContent = expanded
+      fetched.meta.isLlmsTxt = true
+    } catch (e: any) {
+      // All-or-nothing: abort the entire add
+      throw new FetchError(
+        `Failed to index ${name}: ${e.message}`,
+        'LLMS_TXT_EXPAND_FAILED',
+        0
+      )
     }
   }
 
@@ -400,41 +406,8 @@ async function addSource(
   const { config } = loadConfig()
   state.config = config
 
-  // Insert chunks + embed
-  if (state.embedder && chunks.length > 0) {
-    try {
-      const dims = await state.embedder.getDimensions()
-      ensureVecTable(db, dims)
-      state.embeddingDims = dims
-
-      // Build embedding texts: header + content
-      const embedTexts = chunks.map((c) => `${c.header}\n\n${c.content}`)
-
-      const embeddings = await state.embedder!.embedBatch(embedTexts)
-
-      for (let i = 0; i < chunks.length; i++) {
-        const c = chunks[i]
-        const hash = chunkHash(name, c.sectionPath)
-        const rowid = insertChunk(db, {
-          hash,
-          source: name,
-          sectionPath: c.sectionPath,
-          header: c.header,
-          content: c.content,
-          hasCodeBlocks: c.hasCodeBlocks
-        })
-
-        if (embeddings[i]) {
-          insertEmbedding(db, rowid, embeddings[i], dims)
-        }
-      }
-    } catch (e: any) {
-      console.error(
-        `[doclab] Embedding failed for ${name}: ${e.message}. Chunks stored without embeddings.`
-      )
-    }
-  } else if (chunks.length > 0) {
-    // No embedder — store chunks only (keyword search works)
+  // Insert chunks first (before embedding — they persist even if embed fails)
+  if (chunks.length > 0) {
     for (const c of chunks) {
       const hash = chunkHash(name, c.sectionPath)
       insertChunk(db, {
@@ -445,6 +418,34 @@ async function addSource(
         content: c.content,
         hasCodeBlocks: c.hasCodeBlocks
       })
+    }
+  }
+
+  // Embed chunks (best-effort)
+  if (state.embedder && chunks.length > 0) {
+    try {
+      const dims = await state.embedder.getDimensions()
+      ensureVecTable(db, dims)
+      state.embeddingDims = dims
+
+      const embedTexts = chunks.map((c) => `${c.header}\n\n${c.content}`)
+      const embeddings = await state.embedder!.embedBatch(embedTexts)
+
+      for (let i = 0; i < chunks.length; i++) {
+        if (embeddings[i]) {
+          const hash = chunkHash(name, chunks[i].sectionPath)
+          const row = db
+            .prepare('SELECT id FROM chunks WHERE hash = ?')
+            .get(hash) as { id: number } | undefined
+          if (row) {
+            insertEmbedding(db, row.id, embeddings[i], dims)
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error(
+        `[doclab] Embedding failed for ${name}: ${e.message}. Chunks searchable via keyword only.`
+      )
     }
   }
 
