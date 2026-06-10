@@ -239,6 +239,45 @@ export function isLlmsTxtUrl(url: string): boolean {
   }
 }
 
+export async function fetchAndConcat(
+  urls: string[],
+  jinaApiKey?: string,
+  concurrency = 5
+): Promise<string> {
+  const total = urls.length
+  const results: string[] = new Array(total)
+  const failed: { url: string; error: string }[] = []
+
+  // Process in batches to limit concurrency
+  for (let i = 0; i < total; i += concurrency) {
+    const batch = urls.slice(i, i + concurrency)
+    const settled = await Promise.allSettled(
+      batch.map(async (u, bi) => {
+        const idx = i + bi
+        const fileName = u.split('/').pop() || u
+        process.stderr.write(`[${idx + 1}/${total}] Fetching ${fileName}...\n`)
+        const result = await fetchUrl(u, jinaApiKey)
+        results[idx] = result.content
+      })
+    )
+
+    for (let j = 0; j < settled.length; j++) {
+      if (settled[j].status === 'rejected') {
+        failed.push({ url: urls[i + j], error: settled[j].reason?.message ?? 'Unknown error' })
+      }
+    }
+  }
+
+  if (failed.length > 0) {
+    const names = failed.map((f) => f.url.split('/').pop() || f.url).join(', ')
+    throw new Error(
+      `Failed to index: ${failed.length}/${total} pages could not be fetched (${names})`
+    )
+  }
+
+  return results.join('\n\n')
+}
+
 export function extractRelativeLinks(content: string, baseUrl: string): string[] {
   const base = new URL(baseUrl)
   const linkRegex = /\[([^\]]*)\]\(([^)]+)\)/g

@@ -5,8 +5,69 @@ import {
   chunkHash,
   FetchError,
   isLlmsTxtUrl,
+  fetchAndConcat,
   extractRelativeLinks
 } from '../src/lib/fetcher'
+
+describe('fetchAndConcat', () => {
+  test('returns empty string for empty array', async () => {
+    const result = await fetchAndConcat([])
+    expect(result).toBe('')
+  })
+
+  test('throws all-or-nothing error when any URL fails', async () => {
+    try {
+      await fetchAndConcat(['http://127.0.0.1:19999/nope.md'])
+      expect(false).toBe(true)
+    } catch (e: any) {
+      expect(e.message).toContain('Failed to index:')
+      expect(e.message).toContain('nope.md')
+    }
+  })
+
+  test('fetches and concatenates pages preserving order', async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const url = new URL(req.url)
+        if (url.pathname === '/page1.md') {
+          return new Response('# Page 1\n\nContent one.', {
+            headers: { 'Content-Type': 'text/markdown' }
+          })
+        }
+        if (url.pathname === '/page2.md') {
+          return new Response('# Page 2\n\nContent two.', {
+            headers: { 'Content-Type': 'text/markdown' }
+          })
+        }
+        if (url.pathname === '/page3.md') {
+          return new Response('# Page 3\n\nContent three.', {
+            headers: { 'Content-Type': 'text/markdown' }
+          })
+        }
+        return new Response('Not Found', { status: 404 })
+      }
+    })
+
+    try {
+      const base = `http://127.0.0.1:${server.port}`
+      const result = await fetchAndConcat([
+        `${base}/page1.md`,
+        `${base}/page2.md`,
+        `${base}/page3.md`
+      ])
+
+      expect(result).toContain('# Page 1')
+      expect(result).toContain('# Page 2')
+      expect(result).toContain('# Page 3')
+      expect(result).toBe(
+        '# Page 1\n\nContent one.\n\n# Page 2\n\nContent two.\n\n# Page 3\n\nContent three.'
+      )
+    } finally {
+      server.stop()
+    }
+  })
+})
 
 describe('isLlmsTxtUrl', () => {
   test('returns true for llms.txt URLs', () => {
