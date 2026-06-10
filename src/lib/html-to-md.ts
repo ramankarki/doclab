@@ -25,7 +25,10 @@ export function htmlToMarkdown(html: string): string {
   result = convertImages(result)
   result = convertParagraphs(result)
 
-  // 4. Remove remaining HTML tags
+  // 4. Preserve Tab components before tag stripping
+  result = preserveTabComponents(result)
+
+  // 5. Remove remaining HTML tags
   result = stripRemainingTags(result)
 
   // 5. Decode HTML entities (after tags removed)
@@ -218,6 +221,15 @@ function convertParagraphs(html: string): string {
   html = html.replace(/<hr\s*\/?>/gi, '\n\n---\n\n')
   html = html.replace(/<\/(?:div|section|article)>/gi, '\n\n')
   return html
+}
+
+function preserveTabComponents(html: string): string {
+  // Convert <Tab value="X">...content...</Tab> to "**Tab: X**\n...content..."
+  // Preserves framework-specific code examples before tag stripping
+  return html.replace(
+    /<Tab[^>]*value=["']([^"']*)["'][^>]*>([\s\S]*?)<\/Tab>/gi,
+    (_, label, content) => `\n\n**Tab: ${label.trim()}**\n${content}\n`
+  )
 }
 
 function stripRemainingTags(html: string): string {

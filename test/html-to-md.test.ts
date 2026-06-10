@@ -108,4 +108,29 @@ describe('htmlToMarkdown', () => {
     expect(md).toContain('| Alice | 30 |')
     expect(md).toContain('| Bob | 25 |')
   })
+
+  test('preserves Tab component labels and content', () => {
+    const html = `
+      <div>
+        <Tab value="hono">
+          app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+        </Tab>
+        <Tab value="express">
+          app.use("/api/auth/*", authHandler());
+        </Tab>
+        <p>Some text</p>
+      </div>
+    `
+    const md = htmlToMarkdown(html)
+    // Tab labels preserved as bold markers
+    expect(md).toContain('**Tab: hono**')
+    expect(md).toContain('**Tab: express**')
+    // Code content preserved
+    expect(md).toContain('app.on([')
+    expect(md).toContain('auth.handler(c.req.raw)')
+    expect(md).toContain('app.use(')
+    expect(md).toContain('authHandler()')
+    // Non-tab content still present
+    expect(md).toContain('Some text')
+  })
 })
