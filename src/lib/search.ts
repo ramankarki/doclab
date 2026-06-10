@@ -145,7 +145,7 @@ function keywordSearch(
     const contentLower = (r.content ?? '').toLowerCase()
 
     for (const token of tokens) {
-      if (headerLower.includes(token)) score += 3
+      if (headerLower.includes(token)) score += 10
       if (pathLower.includes(token)) score += 2
       if (contentLower.includes(token)) score += 1
     }
