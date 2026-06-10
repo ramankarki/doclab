@@ -239,6 +239,46 @@ export function isLlmsTxtUrl(url: string): boolean {
   }
 }
 
+export function extractRelativeLinks(content: string, baseUrl: string): string[] {
+  const base = new URL(baseUrl)
+  const linkRegex = /\[([^\]]*)\]\(([^)]+)\)/g
+  const urls = new Set<string>()
+
+  let match: RegExpExecArray | null
+  while ((match = linkRegex.exec(content)) !== null) {
+    const href = match[2].trim()
+
+    // Skip empty, anchor-only, external URLs, mailto, javascript
+    if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('javascript:')) {
+      continue
+    }
+
+    let resolved: URL
+    try {
+      // Try resolving as relative
+      if (href.startsWith('http://') || href.startsWith('https://')) {
+        // Absolute URL — skip if external domain
+        const parsed = new URL(href)
+        if (parsed.hostname !== base.hostname) continue
+        resolved = parsed
+      } else {
+        resolved = new URL(href, baseUrl)
+      }
+    } catch {
+      continue
+    }
+
+    // Only keep same-domain URLs
+    if (resolved.hostname !== base.hostname) continue
+
+    // Strip fragment to deduplicate
+    resolved.hash = ''
+    urls.add(resolved.toString())
+  }
+
+  return Array.from(urls)
+}
+
 export function chunkHash(source: string, sectionPath: string): string {
   return createHash('sha256').update(`${source}:${sectionPath}`).digest('hex').slice(0, 16)
 }
