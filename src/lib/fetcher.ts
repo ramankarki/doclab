@@ -231,6 +231,14 @@ export function hashContent(content: string): string {
   return createHash('sha256').update(content).digest('hex')
 }
 
+export function isLlmsTxtUrl(url: string): boolean {
+  try {
+    return new URL(url).pathname.endsWith('/llms.txt')
+  } catch {
+    return false
+  }
+}
+
 export function chunkHash(source: string, sectionPath: string): string {
   return createHash('sha256').update(`${source}:${sectionPath}`).digest('hex').slice(0, 16)
 }

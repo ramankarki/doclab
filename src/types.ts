@@ -54,6 +54,7 @@ export interface SourceMeta {
   publishedAt?: string
   domain: string
   kind: SourceKind
+  isLlmsTxt?: boolean
 }
 
 // ─── Chunk types ───
