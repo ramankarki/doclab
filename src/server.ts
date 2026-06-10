@@ -22,7 +22,7 @@ import type {
 } from './types'
 import { Embedder } from './lib/embedder'
 import { hybridSearch } from './lib/search'
-import { fetchUrl, FetchError } from './lib/fetcher'
+import { fetchUrl, FetchError, isLlmsTxtUrl, extractRelativeLinks, fetchAndConcat } from './lib/fetcher'
 import { htmlToMarkdown } from './lib/html-to-md'
 import { extractContent } from './lib/readability-extract'
 import { chunkMarkdown } from './lib/chunker'
@@ -336,6 +336,9 @@ async function addSource(
   // Fetch
   const fetched = await fetchUrl(url, state.config.jinaApiKey)
 
+  // Generate name (before expansion so error messages can use it)
+  const name = nameOverride ?? generatedName(url, fetched.meta.title ?? '')
+
   // Convert HTML to markdown if needed
   let mdContent = fetched.content
   if (fetched.isHtml && !fetched.isMarkdown) {
@@ -344,8 +347,27 @@ async function addSource(
     mdContent = htmlToMarkdown(cleanedHtml)
   }
 
-  // Generate name
-  const name = nameOverride ?? generatedName(url, fetched.meta.title ?? '')
+  // Expand llms.txt TOC: extract sub-page links, fetch & concatenate
+  if (isLlmsTxtUrl(url)) {
+    const links = extractRelativeLinks(fetched.content, url)
+    if (links.length > 0) {
+      console.log(
+        `${c.info}[doclab]${c.reset} Expanding llms.txt: ${links.length} sub-pages...`
+      )
+      try {
+        const expanded = await fetchAndConcat(links, state.config.jinaApiKey)
+        mdContent = expanded
+        fetched.meta.isLlmsTxt = true
+      } catch (e: any) {
+        // All-or-nothing: abort the entire add
+        throw new FetchError(
+          `Failed to index ${name}: ${e.message}`,
+          'LLMS_TXT_EXPAND_FAILED',
+          0
+        )
+      }
+    }
+  }
 
   // Chunk
   const chunks = chunkMarkdown(mdContent, name)
@@ -363,7 +385,8 @@ async function addSource(
     author: fetched.meta.author,
     publishedAt: fetched.meta.publishedAt,
     domain: fetched.meta.domain ?? new URL(url).hostname,
-    kind: fetched.meta.kind ?? 'unknown'
+    kind: fetched.meta.kind ?? 'unknown',
+    isLlmsTxt: fetched.meta.isLlmsTxt
   }
 
   // Delete existing chunks for this source

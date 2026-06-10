@@ -262,8 +262,9 @@ export async function fetchAndConcat(
     )
 
     for (let j = 0; j < settled.length; j++) {
-      if (settled[j].status === 'rejected') {
-        failed.push({ url: urls[i + j], error: settled[j].reason?.message ?? 'Unknown error' })
+      const s = settled[j]
+      if (s.status === 'rejected') {
+        failed.push({ url: urls[i + j], error: s.reason?.message ?? 'Unknown error' })
       }
     }
   }
