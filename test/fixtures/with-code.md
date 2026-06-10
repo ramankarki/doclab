@@ -19,10 +19,13 @@ Apply middleware globally or per-route:
 
 ```ts
 import { cors } from 'hono/cors'
-app.use('*', cors({
-  origin: 'https://example.com',
-  allowMethods: ['GET', 'POST'],
-}))
+app.use(
+  '*',
+  cors({
+    origin: 'https://example.com',
+    allowMethods: ['GET', 'POST']
+  })
+)
 ```
 
 ## Database Setup

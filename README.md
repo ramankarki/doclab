@@ -24,18 +24,18 @@ No Ollama? No problem — keyword search works without it. Install Ollama for hy
 
 ## Why doclab?
 
-| | Web Search | Context7 | DevDocs.io | doclab |
-|---|---|---|---|---|
-| **Local/private** | ❌ | ❌ Cloud + key | ✅ | ✅ |
-| **Any URL** | ✅ | ❌ Library catalog | ❌ Pre-bundled | ✅ |
-| **HTTP API** | ❌ | ❌ MCP only | ❌ Web UI | ✅ |
-| **Global daemon** | N/A | N/A | ❌ Browser | ✅ |
-| **Agent-agnostic** | ❌ | ❌ MCP-tied | ❌ Browser | ✅ |
-| **Hybrid search** | Keyword only | Semantic only | Keyword only | ✅ Vector + keyword + RRF |
-| **Auto-freshness** | ✅ Real-time | ❌ Cloud-managed | ❌ Manual | ✅ Auto-rebuild + cleanup |
-| **HTML handling** | ✅ | ✅ (curated) | N/A | ✅ Auto-convert to markdown |
-| **Offline** | ❌ | ❌ | ✅ | ✅ |
-| **Cost** | Free (SEO-biased) | Free tier | Free | Free (Ollama) |
+|                    | Web Search        | Context7           | DevDocs.io     | doclab                      |
+| ------------------ | ----------------- | ------------------ | -------------- | --------------------------- |
+| **Local/private**  | ❌                | ❌ Cloud + key     | ✅             | ✅                          |
+| **Any URL**        | ✅                | ❌ Library catalog | ❌ Pre-bundled | ✅                          |
+| **HTTP API**       | ❌                | ❌ MCP only        | ❌ Web UI      | ✅                          |
+| **Global daemon**  | N/A               | N/A                | ❌ Browser     | ✅                          |
+| **Agent-agnostic** | ❌                | ❌ MCP-tied        | ❌ Browser     | ✅                          |
+| **Hybrid search**  | Keyword only      | Semantic only      | Keyword only   | ✅ Vector + keyword + RRF   |
+| **Auto-freshness** | ✅ Real-time      | ❌ Cloud-managed   | ❌ Manual      | ✅ Auto-rebuild + cleanup   |
+| **HTML handling**  | ✅                | ✅ (curated)       | N/A            | ✅ Auto-convert to markdown |
+| **Offline**        | ❌                | ❌                 | ✅             | ✅                          |
+| **Cost**           | Free (SEO-biased) | Free tier          | Free           | Free (Ollama)               |
 
 doclab combines all of these — local, private, any URL, hybrid search, auto-updating — into a single background daemon that any coding agent can query via HTTP.
 
@@ -82,19 +82,19 @@ Agent asks "how to use Bun with Drizzle ORM"
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `doclab start` | Start background daemon (idempotent, auto-starts on any command) |
-| `doclab stop` | Stop daemon |
-| `doclab status` | Daemon health, chunk count, Ollama status, uptime |
-| `doclab mem \| memory` | Real-time memory usage (RSS, heap, DB, logs, vector index) |
-| `doclab add <url> [--name <n>]` | Fetch → extract content → chunk → embed → index |
-| `doclab remove <name>` | Delete source and all chunks |
-| `doclab list` | All sources with chunk counts and freshness |
-| `doclab pull [name]` | Re-fetch all or one source, update changed content |
-| `doclab search <query> [...]` | Hybrid search (vector + keyword + RRF fusion) |
-| `doclab rebuild` | Drop DB, re-index all sources from scratch |
-| `doclab init` | Generate AGENTS.md snippet for your agent's system prompt |
+| Command                         | Description                                                      |
+| ------------------------------- | ---------------------------------------------------------------- |
+| `doclab start`                  | Start background daemon (idempotent, auto-starts on any command) |
+| `doclab stop`                   | Stop daemon                                                      |
+| `doclab status`                 | Daemon health, chunk count, Ollama status, uptime                |
+| `doclab mem \| memory`          | Real-time memory usage (RSS, heap, DB, logs, vector index)       |
+| `doclab add <url> [--name <n>]` | Fetch → extract content → chunk → embed → index                  |
+| `doclab remove <name>`          | Delete source and all chunks                                     |
+| `doclab list`                   | All sources with chunk counts and freshness                      |
+| `doclab pull [name]`            | Re-fetch all or one source, update changed content               |
+| `doclab search <query> [...]`   | Hybrid search (vector + keyword + RRF fusion)                    |
+| `doclab rebuild`                | Drop DB, re-index all sources from scratch                       |
+| `doclab init`                   | Generate AGENTS.md snippet for your agent's system prompt        |
 
 The daemon auto-shuts down after 30 minutes idle. It auto-starts on the next command.
 
@@ -129,29 +129,29 @@ doclab search "drizzle schema" --topK 10          # Return more results
 }
 ```
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `embedding.provider` | `"ollama"` | `ollama` / `openai` / `voyage` |
-| `embedding.model` | auto | Model override per provider |
-| `embedding.apiKey` | — | API key. Supports `$ENV_VAR` syntax |
-| `rebuildInterval` | `"24h"` | `"12h"`, `"7d"`, `"never"` |
-| `maxChunksPerQuery` | `5` | Top K results per search |
-| `idleTimeout` | `"30m"` | Auto-shutdown timeout. `"never"` to disable |
-| `jinaApiKey` | `""` | Optional Jina AI API key for higher rate limits on Cloudflare-protected pages |
+| Field                | Default    | Description                                                                   |
+| -------------------- | ---------- | ----------------------------------------------------------------------------- |
+| `embedding.provider` | `"ollama"` | `ollama` / `openai` / `voyage`                                                |
+| `embedding.model`    | auto       | Model override per provider                                                   |
+| `embedding.apiKey`   | —          | API key. Supports `$ENV_VAR` syntax                                           |
+| `rebuildInterval`    | `"24h"`    | `"12h"`, `"7d"`, `"never"`                                                    |
+| `maxChunksPerQuery`  | `5`        | Top K results per search                                                      |
+| `idleTimeout`        | `"30m"`    | Auto-shutdown timeout. `"never"` to disable                                   |
+| `jinaApiKey`         | `""`       | Optional Jina AI API key for higher rate limits on Cloudflare-protected pages |
 
 ## Sources — Any URL
 
 doclab accepts any URL with technical content:
 
-| Type | Example | Format |
-|------|---------|--------|
-| Package docs | `hono.dev/llms-full.txt` | Markdown |
-| Framework guides | `nextjs.org/docs/app/building-your-application` | HTML |
-| Blog posts | `overreacted.io/why-do-hooks-rely-on-call-order` | HTML |
-| Tutorials | `dev.to/...`, `freecodecamp.org/...` | HTML |
-| API references | `stripe.com/docs/api` | HTML |
-| Migration guides | `react.dev/blog/...` | HTML |
-| GitHub READMEs | `github.com/user/repo#readme` | Markdown |
+| Type             | Example                                          | Format   |
+| ---------------- | ------------------------------------------------ | -------- |
+| Package docs     | `hono.dev/llms-full.txt`                         | Markdown |
+| Framework guides | `nextjs.org/docs/app/building-your-application`  | HTML     |
+| Blog posts       | `overreacted.io/why-do-hooks-rely-on-call-order` | HTML     |
+| Tutorials        | `dev.to/...`, `freecodecamp.org/...`             | HTML     |
+| API references   | `stripe.com/docs/api`                            | HTML     |
+| Migration guides | `react.dev/blog/...`                             | HTML     |
+| GitHub READMEs   | `github.com/user/repo#readme`                    | Markdown |
 
 HTML pages are automatically converted to clean markdown. First through Mozilla's Readability (content extraction — strips nav, ads, sidebars), then through a custom markdown converter that preserves code fences, headings, and links.
 
@@ -172,24 +172,24 @@ The daemon runs on `http://127.0.0.1:{port}` (bind to localhost only). No authen
 
 ## HTTP API
 
-| Method | Path | Body | Description |
-|--------|------|------|-------------|
-| `GET` | `/health` | — | Health check + status |
-| `POST` | `/search` | `{ query, source?, kind?, topK? }` | Hybrid search |
-| `GET` | `/sources` | — | List all sources |
-| `POST` | `/add` | `{ url, name? }` | Add + fetch + index |
-| `POST` | `/remove` | `{ name }` | Remove source |
-| `POST` | `/pull` | `{ name? }` | Re-fetch sources |
-| `POST` | `/rebuild` | — | Full re-index |
+| Method | Path       | Body                               | Description           |
+| ------ | ---------- | ---------------------------------- | --------------------- |
+| `GET`  | `/health`  | —                                  | Health check + status |
+| `POST` | `/search`  | `{ query, source?, kind?, topK? }` | Hybrid search         |
+| `GET`  | `/sources` | —                                  | List all sources      |
+| `POST` | `/add`     | `{ url, name? }`                   | Add + fetch + index   |
+| `POST` | `/remove`  | `{ name }`                         | Remove source         |
+| `POST` | `/pull`    | `{ name? }`                        | Re-fetch sources      |
+| `POST` | `/rebuild` | —                                  | Full re-index         |
 
 ## Resource Profile
 
-| Component | RAM |
-|-----------|-----|
-| `nomic-embed-text` (Ollama) | ~270 MB |
-| Bun runtime | ~30 MB |
-| SQLite + vec0 index | ~50 MB |
-| **Total** | **~350 MB** |
+| Component                   | RAM         |
+| --------------------------- | ----------- |
+| `nomic-embed-text` (Ollama) | ~270 MB     |
+| Bun runtime                 | ~30 MB      |
+| SQLite + vec0 index         | ~50 MB      |
+| **Total**                   | **~350 MB** |
 
 ## Logs
 
@@ -208,6 +208,7 @@ Daemon logs are written to `~/.doclab/logs/daemon.log`:
 ## Degraded Mode
 
 If no embedding engine is reachable:
+
 - `search` falls back to keyword-only (case-insensitive substring + token overlap)
 - Response includes `degraded: true`
 - Server prints hint: `Install ollama: brew install ollama && ollama pull nomic-embed-text`

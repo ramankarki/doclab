@@ -108,32 +108,33 @@ Agent asks "how to use Bun with Drizzle ORM"
 
 ### Key Design Decisions
 
-| Decision | Why |
-|---|---|
-| **Single global daemon** | One server serves all agents, all projects. Knowledge is project-agnostic. |
-| **Any URL, not just llms.txt** | Framework docs, blog posts, tutorials, migration guides — all same pipeline. |
-| **HTML → Markdown conversion** | Preserves headings, code blocks, links. Non-markdown URLs handled automatically. |
-| **sqlite-vec** | Proven in codeview. WAL, transactions, concurrent reads. Zero infra. |
-| **Custom markdown chunker** | ~100 lines. Split on h2, preserve code fences. No max chunk size — semantic unit is atomic. No LlamaIndex. |
-| **No generation in v1** | Agents are LLMs. They synthesize answers from raw chunks better than small local models. |
-| **Ollama default, multi-provider** | Same embedding abstraction as codeview. Free local, or paid API. |
-| **Scheduled rebuilds** | Content doesn't change while you code. 24h default. |
-| **Hybrid search** | Vector + keyword + RRF. Pure vector misses exact API names. Keyword catches them. |
-| **URL death = cleanup** | Source returns 404/410/connection failure → chunks removed. Dead links = dead knowledge. |
-| **Resource minimal** | ~350MB total (nomic-embed-text + Bun + SQLite). Less than a Chrome tab. |
+| Decision                           | Why                                                                                                        |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Single global daemon**           | One server serves all agents, all projects. Knowledge is project-agnostic.                                 |
+| **Any URL, not just llms.txt**     | Framework docs, blog posts, tutorials, migration guides — all same pipeline.                               |
+| **HTML → Markdown conversion**     | Preserves headings, code blocks, links. Non-markdown URLs handled automatically.                           |
+| **sqlite-vec**                     | Proven in codeview. WAL, transactions, concurrent reads. Zero infra.                                       |
+| **Custom markdown chunker**        | ~100 lines. Split on h2, preserve code fences. No max chunk size — semantic unit is atomic. No LlamaIndex. |
+| **No generation in v1**            | Agents are LLMs. They synthesize answers from raw chunks better than small local models.                   |
+| **Ollama default, multi-provider** | Same embedding abstraction as codeview. Free local, or paid API.                                           |
+| **Scheduled rebuilds**             | Content doesn't change while you code. 24h default.                                                        |
+| **Hybrid search**                  | Vector + keyword + RRF. Pure vector misses exact API names. Keyword catches them.                          |
+| **URL death = cleanup**            | Source returns 404/410/connection failure → chunks removed. Dead links = dead knowledge.                   |
+| **Resource minimal**               | ~350MB total (nomic-embed-text + Bun + SQLite). Less than a Chrome tab.                                    |
 
 ### Resource Profile
 
-| Component | RAM |
-|-----------|-----|
-| `nomic-embed-text` (Ollama) | ~270 MB |
-| Bun runtime | ~30 MB |
-| SQLite + vec0 index | ~50 MB |
-| **Total** | **~350 MB** |
+| Component                   | RAM         |
+| --------------------------- | ----------- |
+| `nomic-embed-text` (Ollama) | ~270 MB     |
+| Bun runtime                 | ~30 MB      |
+| SQLite + vec0 index         | ~50 MB      |
+| **Total**                   | **~350 MB** |
 
 ### Degraded Mode
 
 If no embedding engine is configured or reachable:
+
 - `search` falls back to keyword-only (case-insensitive substring + token overlap)
 - Response includes `degraded: true`
 - Server prints hint: `Install ollama: brew install ollama && ollama pull nomic-embed-text`
@@ -244,21 +245,22 @@ doclab uses a semantic color design system (zero dependencies, ANSI escape codes
 
 **Design tokens** (`src/lib/colors.ts`):
 
-| Token | Color | Usage |
-|-------|-------|-------|
-| `c.heading` | bold cyan | Table headers, section titles |
-| `c.cmd` | cyan | Command names, executable references |
-| `c.arg` | dim | Argument placeholders in help |
-| `c.success` | green | OK, Ready, Added, Updated, Complete |
-| `c.error` | red | Failed, errors, fatal |
-| `c.warn` | yellow | Warnings, stale indicator, unreachable |
-| `c.dim` | dim | Separators, total line, secondary info |
-| `c.info` | cyan | Daemon lifecycle (rebuild, shutdown) |
-| `c.label` | dim | Status labels (Daemon:, Ollama:, etc.) |
-| `c.highlight` | bold | Important values, Search: label |
-| `c.muted` | gray | De-emphasized text |
+| Token         | Color     | Usage                                  |
+| ------------- | --------- | -------------------------------------- |
+| `c.heading`   | bold cyan | Table headers, section titles          |
+| `c.cmd`       | cyan      | Command names, executable references   |
+| `c.arg`       | dim       | Argument placeholders in help          |
+| `c.success`   | green     | OK, Ready, Added, Updated, Complete    |
+| `c.error`     | red       | Failed, errors, fatal                  |
+| `c.warn`      | yellow    | Warnings, stale indicator, unreachable |
+| `c.dim`       | dim       | Separators, total line, secondary info |
+| `c.info`      | cyan      | Daemon lifecycle (rebuild, shutdown)   |
+| `c.label`     | dim       | Status labels (Daemon:, Ollama:, etc.) |
+| `c.highlight` | bold      | Important values, Search: label        |
+| `c.muted`     | gray      | De-emphasized text                     |
 
 **Rules:**
+
 - NO_COLOR env or non-TTY → all codes stripped (clean in CI/pipes)
 - Log files are always plain text (no ANSI codes written to disk)
 - Errors route to stderr (`console.error`) with `c.error` styling
@@ -266,6 +268,7 @@ doclab uses a semantic color design system (zero dependencies, ANSI escape codes
 - Server logs prefix with `[OK]` (green) or `[WARN]` (yellow)
 
 **`list` command table format:**
+
 ```
 NAME             URL                              VERSION   CHUNKS  FETCHED
 ───────────────────────────────────────────────────────────────────────────
@@ -275,6 +278,7 @@ svelte-kit       https://kit.svelte.dev/docs/...  v4.5           8  3d ago ⚠
 
 total: 3
 ```
+
 Columns auto-sized. URL capped at 50 chars with … truncation. Stale rows (fetched > rebuildInterval) show yellow ⚠.
 
 ### 3.7 `doclab mem` Output
@@ -312,6 +316,7 @@ Idle timeout: 30m (last request 2m ago)
 ```
 
 When daemon not running:
+
 ```
 $ doclab status
 Daemon: not running
@@ -394,21 +399,22 @@ When `doclab start` is called:
 
 On startup, `~/.doclab/dlconfig.json` is validated:
 
-| Check | Action |
-|-------|--------|
-| File missing (first run) | Warn: "No config yet. Add sources with: doclab add <url>". Create empty config. Continue. |
-| Invalid JSON | Error: "dlconfig.json: Invalid JSON at line {n}." Exit 1. |
-| `sources` not an array | Error: "dlconfig.json: 'sources' must be an array." Exit 1. |
-| `sources[].url` missing or empty | Error: "dlconfig.json: Source '{name}' missing 'url'." Exit 1. |
-| `sources[].url` not a valid URL | Error: "dlconfig.json: '{url}' is not a valid URL." Exit 1. |
-| Duplicate source name | Error: "dlconfig.json: Duplicate source name '{name}'." Exit 1. |
+| Check                                                | Action                                                                                                  |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| File missing (first run)                             | Warn: "No config yet. Add sources with: doclab add <url>". Create empty config. Continue.               |
+| Invalid JSON                                         | Error: "dlconfig.json: Invalid JSON at line {n}." Exit 1.                                               |
+| `sources` not an array                               | Error: "dlconfig.json: 'sources' must be an array." Exit 1.                                             |
+| `sources[].url` missing or empty                     | Error: "dlconfig.json: Source '{name}' missing 'url'." Exit 1.                                          |
+| `sources[].url` not a valid URL                      | Error: "dlconfig.json: '{url}' is not a valid URL." Exit 1.                                             |
+| Duplicate source name                                | Error: "dlconfig.json: Duplicate source name '{name}'." Exit 1.                                         |
 | `embedding.provider` not in [ollama, openai, voyage] | Error: "dlconfig.json: Unknown embedding provider '{provider}'. Valid: ollama, openai, voyage." Exit 1. |
-| `embedding.apiKey` resolves to empty (openai/voyage) | Warn: "API key not set. Embedding disabled." Enter degraded mode. |
-| `rebuildInterval` unparseable | Warn: "Invalid rebuildInterval. Using default: 24h." |
-| `idleTimeout` unparseable | Warn: "Invalid idleTimeout. Using default: 30m." |
-| `port` specified but in use | Error: "Port {port} is in use. Pick another or remove 'port' from config." Exit 1. |
+| `embedding.apiKey` resolves to empty (openai/voyage) | Warn: "API key not set. Embedding disabled." Enter degraded mode.                                       |
+| `rebuildInterval` unparseable                        | Warn: "Invalid rebuildInterval. Using default: 24h."                                                    |
+| `idleTimeout` unparseable                            | Warn: "Invalid idleTimeout. Using default: 30m."                                                        |
+| `port` specified but in use                          | Error: "Port {port} is in use. Pick another or remove 'port' from config." Exit 1.                      |
 
 **Error format:**
+
 ```
 dlconfig.json: Source 'missing-docs' has no 'url' field.
   Fix: Add a 'url' field or remove the source with 'doclab remove missing-docs'.
@@ -420,12 +426,12 @@ Validation runs on startup AND on `doclab add` (before committing to config). In
 
 SQLite in WAL mode handles concurrent reads natively. Writes are serialized.
 
-| Scenario | Handling |
-|----------|----------|
-| Multiple `search` calls simultaneously | ✅ WAL mode. Concurrent reads, safe. |
-| `search` while `pull` is running | ✅ Reads see old data until pull commits. WAL isolation. |
-| Two `pull` calls simultaneously | ❌ Second pull returns error: "Rebuild already in progress." |
-| Two `add` calls simultaneously | ❌ Second add returns error: "Another operation in progress." |
+| Scenario                               | Handling                                                      |
+| -------------------------------------- | ------------------------------------------------------------- |
+| Multiple `search` calls simultaneously | ✅ WAL mode. Concurrent reads, safe.                          |
+| `search` while `pull` is running       | ✅ Reads see old data until pull commits. WAL isolation.      |
+| Two `pull` calls simultaneously        | ❌ Second pull returns error: "Rebuild already in progress."  |
+| Two `add` calls simultaneously         | ❌ Second add returns error: "Another operation in progress." |
 
 **Write lock:** A single in-memory mutex (`isWriting` flag) gates all write operations (pull, rebuild, add, remove). If a write is in progress, subsequent write requests get HTTP 409 Conflict. Reads are never blocked.
 
@@ -469,16 +475,16 @@ Daemon started (Bun.spawn child process)
 
 doclab accepts any URL with technical content:
 
-| Type | Examples | Format |
-|------|----------|--------|
-| Package docs | `hono.dev/llms-full.txt`, `drizzle.team/llms-full.txt` | Markdown |
-| Framework guides | `nextjs.org/docs/app/building-your-application` | HTML |
-| Blog posts | `overreacted.io/why-do-hooks-rely-on-call-order` | HTML |
-| Tutorials | `dev.to/...`, `freecodecamp.org/...` | HTML |
-| API references | `stripe.com/docs/api` | HTML |
-| Migration guides | `react.dev/blog/...` | HTML |
-| Readme pages | `github.com/user/repo#readme` | Markdown |
-| Raw markdown | Any URL returning `text/markdown` or `text/plain` | Markdown |
+| Type             | Examples                                               | Format   |
+| ---------------- | ------------------------------------------------------ | -------- |
+| Package docs     | `hono.dev/llms-full.txt`, `drizzle.team/llms-full.txt` | Markdown |
+| Framework guides | `nextjs.org/docs/app/building-your-application`        | HTML     |
+| Blog posts       | `overreacted.io/why-do-hooks-rely-on-call-order`       | HTML     |
+| Tutorials        | `dev.to/...`, `freecodecamp.org/...`                   | HTML     |
+| API references   | `stripe.com/docs/api`                                  | HTML     |
+| Migration guides | `react.dev/blog/...`                                   | HTML     |
+| Readme pages     | `github.com/user/repo#readme`                          | Markdown |
+| Raw markdown     | Any URL returning `text/markdown` or `text/plain`      | Markdown |
 
 ### 4.2 Content Format Detection
 
@@ -495,6 +501,7 @@ Fetch URL
 Purpose: normalize to markdown so chunking works uniformly.
 
 Rules:
+
 - `<h1>`-`<h6>` → `#`-`######`
 - `<pre><code>` → fenced code block (detect language from class)
 - `<code>` (inline) → backtick-wrapped
@@ -539,17 +546,17 @@ Rules:
 
 **Config fields:**
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `sources[].name` | string | auto | Short name. Auto-generated from URL if omitted. |
-| `sources[].url` | string | — | URL to fetch. Any technical content. |
-| `embedding.provider` | string | `"ollama"` | `ollama` / `openai` / `voyage` |
-| `embedding.model` | string | auto | Model override |
-| `embedding.ollamaUrl` | string | `"http://localhost:11434"` | Custom Ollama host |
-| `embedding.apiKey` | string | — | API key. Supports `$ENV_VAR`. |
-| `rebuildInterval` | string | `"24h"` | Auto-rebuild: `"12h"`, `"7d"`, `"never"` |
-| `maxChunksPerQuery` | number | `5` | Top K chunks per search |
-| `idleTimeout` | string | `"30m"` | Auto-shutdown after idle |
+| Field                 | Type   | Default                    | Description                                     |
+| --------------------- | ------ | -------------------------- | ----------------------------------------------- |
+| `sources[].name`      | string | auto                       | Short name. Auto-generated from URL if omitted. |
+| `sources[].url`       | string | —                          | URL to fetch. Any technical content.            |
+| `embedding.provider`  | string | `"ollama"`                 | `ollama` / `openai` / `voyage`                  |
+| `embedding.model`     | string | auto                       | Model override                                  |
+| `embedding.ollamaUrl` | string | `"http://localhost:11434"` | Custom Ollama host                              |
+| `embedding.apiKey`    | string | —                          | API key. Supports `$ENV_VAR`.                   |
+| `rebuildInterval`     | string | `"24h"`                    | Auto-rebuild: `"12h"`, `"7d"`, `"never"`        |
+| `maxChunksPerQuery`   | number | `5`                        | Top K chunks per search                         |
+| `idleTimeout`         | string | `"30m"`                    | Auto-shutdown after idle                        |
 
 ### 4.5 Source Metadata
 
@@ -557,21 +564,22 @@ Extracted during fetch:
 
 ```typescript
 interface SourceMeta {
-  name: string;              // from config or auto-generated
-  url: string;               // fetch URL
-  title: string;             // from <title> or first h1
-  fetchedAt: string;         // ISO 8601
-  contentHash: string;       // SHA256 of raw content
-  chunkCount: number;
-  version?: string;          // detected from docs (e.g. "v4.6.5")
-  author?: string;           // from <meta name="author"> if present
-  publishedAt?: string;      // from <meta property="article:published_time"> if present
-  domain: string;            // extracted from URL (e.g. "hono.dev")
-  kind: "docs" | "article" | "tutorial" | "reference" | "unknown";
+  name: string // from config or auto-generated
+  url: string // fetch URL
+  title: string // from <title> or first h1
+  fetchedAt: string // ISO 8601
+  contentHash: string // SHA256 of raw content
+  chunkCount: number
+  version?: string // detected from docs (e.g. "v4.6.5")
+  author?: string // from <meta name="author"> if present
+  publishedAt?: string // from <meta property="article:published_time"> if present
+  domain: string // extracted from URL (e.g. "hono.dev")
+  kind: 'docs' | 'article' | 'tutorial' | 'reference' | 'unknown'
 }
 ```
 
 **Kind detection:**
+
 - URL path contains `/docs/`, `/reference/`, `/api/` → `docs` or `reference`
 - URL is `llms-full.txt` → `docs`
 - Page has `<article>` with `published_time` → `article`
@@ -617,7 +625,7 @@ Markdown chunking is ~100 lines. LlamaIndex is 20+ deps. The tradeoff is obvious
 
 Recursive splitting: each level splits chunks that exceed the target size, descending into finer headers.
 
-```
+````
 TARGET_CHUNK_SIZE = 2500  // chars (~400 tokens). Fits embedding window + agent context.
 MIN_CHUNK_SIZE = 100      // skip near-empty sections
 
@@ -647,11 +655,11 @@ function chunk(text: string, level: HeaderLevel, parentPath: string): Chunk[] {
 
   // 4. Return all chunks with metadata
 }
-```
+````
 
 **Splitting with fence awareness:**
 
-```typescript
+````typescript
 function splitPreservingFences(text: string, pattern: RegExp): string[] {
   // 1. Find all code fence spans (``` pairs)
   // 2. Split text by pattern
@@ -659,20 +667,20 @@ function splitPreservingFences(text: string, pattern: RegExp): string[] {
   //    Instead, shift split to before the fence opens or after it closes
   // 4. Return safe split points
 }
-```
+````
 
 ### 5.3 Critical Rules
 
-| Rule | Reason |
-|------|--------|
-| **NEVER split inside code fences** | A code block is one semantic unit. Splitting mid-function destroys value. |
-| **Target chunk: 2500 chars** | ~400 tokens. Best balance for embedding precision + agent context. |
-| **No hard max** | A 5000-char code block stays whole. Fence preservation beats size limit. |
-| **Min chunk: 100 chars** | Skip near-empty sections ("### See Also" with one link, TOC entries). |
-| **Merge adjacent small chunks** | After paragraph split, merge fragments < 200 chars into neighbors. |
-| **Preserve all whitespace** | Code indentation matters. Don't normalize. |
-| **Recursive descending** | h2 too big → try h3. h3 too big → try h4. No magic thresholds — just size. |
-| **Breadcrumb inheritance** | Each split level inherits parent path: "Hono > Middleware > CORS". |
+| Rule                               | Reason                                                                     |
+| ---------------------------------- | -------------------------------------------------------------------------- |
+| **NEVER split inside code fences** | A code block is one semantic unit. Splitting mid-function destroys value.  |
+| **Target chunk: 2500 chars**       | ~400 tokens. Best balance for embedding precision + agent context.         |
+| **No hard max**                    | A 5000-char code block stays whole. Fence preservation beats size limit.   |
+| **Min chunk: 100 chars**           | Skip near-empty sections ("### See Also" with one link, TOC entries).      |
+| **Merge adjacent small chunks**    | After paragraph split, merge fragments < 200 chars into neighbors.         |
+| **Preserve all whitespace**        | Code indentation matters. Don't normalize.                                 |
+| **Recursive descending**           | h2 too big → try h3. h3 too big → try h4. No magic thresholds — just size. |
+| **Breadcrumb inheritance**         | Each split level inherits parent path: "Hono > Middleware > CORS".         |
 
 ### 5.4 Fallback Cascade
 
@@ -700,21 +708,22 @@ Page with no headers at all (rare, bad HTML):
 
 ```typescript
 interface DocChunk {
-  id: number;                   // autoincrement = vec0 rowid
-  hash: string;                 // SHA256(source + sectionPath)[:16]
-  source: string;               // source name
-  sectionPath: string;          // "Hono > Middleware > CORS" or article title
-  header: string;               // raw header text "## CORS Middleware"
-  content: string;              // full section including code fences
-  hasCodeBlocks: boolean;       // quick filter for code-heavy sections
-  createdAt: string;            // ISO 8601, set on insert
-  updatedAt: string;            // ISO 8601, updated on re-index
+  id: number // autoincrement = vec0 rowid
+  hash: string // SHA256(source + sectionPath)[:16]
+  source: string // source name
+  sectionPath: string // "Hono > Middleware > CORS" or article title
+  header: string // raw header text "## CORS Middleware"
+  content: string // full section including code fences
+  hasCodeBlocks: boolean // quick filter for code-heavy sections
+  createdAt: string // ISO 8601, set on insert
+  updatedAt: string // ISO 8601, updated on re-index
 }
 ```
 
 ### 5.6 Example: Blog Post Chunking
 
 Input (has h2 headers — standard article structure):
+
 ```markdown
 # Why Do React Hooks Rely on Call Order?
 
@@ -738,6 +747,7 @@ Hooks are not magic...
 ```
 
 Output:
+
 ```
 Chunk 1: "Why Do Hooks Rely on Call Order?" (intro section, no code)
 Chunk 2: "How useState Works Internally" (explanation + 80-line code block — kept whole)
@@ -747,7 +757,7 @@ Chunk 4: "Conclusion" (summary, no code)
 
 **No-headers example** (article with only h1, no h2/h3):
 
-```markdown
+````markdown
 # Quick Tip: Bun with Drizzle
 
 Setting up Drizzle ORM with Bun is straightforward.
@@ -758,28 +768,32 @@ First, install the dependencies:
 bun add drizzle-orm
 bun add -D drizzle-kit
 ```
+````
 
 Then create your schema file. Drizzle uses TypeScript for schema definition — no SQL files needed.
 
 ```ts
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey(),
-  name: text('name'),
-});
+  name: text('name')
+})
 ```
 
 Finally, run the migration. Drizzle-kit generates SQL from your TypeScript schema automatically.
+
 ```
 
 Algorithm: 0 h2 headers → 0 h3 headers → fallback to paragraph breaks. The code fences are preserved, and adjacent short paragraphs are merged.
 
 Output:
 ```
+
 Chunk 1: "Quick Tip: Bun with Drizzle" (intro + install instructions, ~200 chars)
 Chunk 2: "Then create your schema file..." (explanation + 10-line code block, ~500 chars)
 Chunk 3: "Finally, run the migration..." (closing paragraph, ~100 chars)
-```
+
+````
 
 Warning printed: "weak chunk boundaries — search quality may vary"
 
@@ -801,7 +815,7 @@ from its own submodule and applied globally or per-route.
 import { cors } from 'hono/cors'
 const app = new Hono()
 app.use('*', cors({ origin: 'https://example.com', allowMethods: ['GET', 'POST'] }))
-```
+````
 
 ### Rate Limiting
 
@@ -823,17 +837,20 @@ app.use('*', logger())
 import { compress } from 'hono/compress'
 app.use('*', compress())
 ```
+
 ```
 
 Algorithm: Split on `## Middleware` → 2800+ chars → exceeds 2500 target → has `###` children → split on `###`.
 
 Output:
 ```
+
 Chunk 1: "Hono > Middleware > CORS" (~400 chars)
 Chunk 2: "Hono > Middleware > Rate Limiting" (~300 chars)
 Chunk 3: "Hono > Middleware > Logging" (~200 chars)
 Chunk 4: "Hono > Middleware > Compression" (~200 chars)
-```
+
+````
 
 The h2 intro text ("Hono provides built-in middleware...") is kept before the first h3 chunk so no content is lost.
 
@@ -847,19 +864,22 @@ Install Hono via npm:
 
 ```bash
 npm install hono
-```
+````
 
 Or with Bun:
 
 ```bash
 bun add hono
 ```
+
 ```
 
 Section is ~200 chars, well under 2500. Output:
 ```
+
 Chunk 1: "Installation" (one chunk, h2 boundary)
-  content: full section text with code blocks
+content: full section text with code blocks
+
 ```
 
 No recursion needed — chunk fits the target size.
@@ -884,14 +904,17 @@ Default: Ollama with `nomic-embed-text`. Recommended for quality + privacy + cos
 ### 6.2 Embedding Pipeline
 
 ```
+
 For each chunk:
-  1. Build embedding text: `${chunk.header}\n\n${chunk.content}`
-     Include header in embedding text — improves retrieval relevance
-  2. Call embedding API → Float32Array
-  3. Store in SQLite:
-     - INSERT chunk → get id
-     - INSERT INTO chunk_embeddings_{dim}d (rowid, embedding) VALUES (chunk.id, vec)
-```
+
+1. Build embedding text: `${chunk.header}\n\n${chunk.content}`
+   Include header in embedding text — improves retrieval relevance
+2. Call embedding API → Float32Array
+3. Store in SQLite:
+   - INSERT chunk → get id
+   - INSERT INTO chunk*embeddings*{dim}d (rowid, embedding) VALUES (chunk.id, vec)
+
+````
 
 **Batch embedding (Ollama):** Send up to 100 texts per request. Reduces HTTP overhead.
 
@@ -935,13 +958,13 @@ CREATE INDEX idx_chunks_section ON chunks(section_path);
 CREATE VIRTUAL TABLE chunk_embeddings_{dim}d USING vec0(
   embedding float[{dim}]
 );
-```
+````
 
 ### 6.4 ANN Search
 
 ```typescript
 function searchChunks(queryEmbedding: Float32Array, topK: number, source?: string) {
-  const table = `chunk_embeddings_${queryEmbedding.length}d`;
+  const table = `chunk_embeddings_${queryEmbedding.length}d`
 
   let sql = `
     SELECT c.id, c.hash, c.source, c.section_path, c.header, c.content,
@@ -952,14 +975,13 @@ function searchChunks(queryEmbedding: Float32Array, topK: number, source?: strin
     JOIN sources s ON c.source = s.name
     WHERE v.embedding MATCH ?
       AND c.stale = 0
-  `;
-  if (source) sql += ` AND c.source = ?`;
-  sql += ` ORDER BY v.distance LIMIT ?`;
+  `
+  if (source) sql += ` AND c.source = ?`
+  sql += ` ORDER BY v.distance LIMIT ?`
 
-  return db.prepare(sql).all(
-    new Float32Array(queryEmbedding),
-    ...(source ? [source, topK] : [topK])
-  );
+  return db
+    .prepare(sql)
+    .all(new Float32Array(queryEmbedding), ...(source ? [source, topK] : [topK]))
 }
 ```
 
@@ -999,12 +1021,12 @@ Two parallel paths:
 
 ```typescript
 function rrf(resultsA: ScoredResult[], resultsB: ScoredResult[], k = 60) {
-  const scores = new Map<string, number>();
-  resultsA.forEach((r, i) => scores.set(r.hash, (scores.get(r.hash) ?? 0) + 1/(k + i + 1)));
-  resultsB.forEach((r, i) => scores.set(r.hash, (scores.get(r.hash) ?? 0) + 1/(k + i + 1)));
+  const scores = new Map<string, number>()
+  resultsA.forEach((r, i) => scores.set(r.hash, (scores.get(r.hash) ?? 0) + 1 / (k + i + 1)))
+  resultsB.forEach((r, i) => scores.set(r.hash, (scores.get(r.hash) ?? 0) + 1 / (k + i + 1)))
   return Array.from(scores.entries())
     .sort((a, b) => b[1] - a[1])
-    .slice(0, topK);
+    .slice(0, topK)
 }
 ```
 
@@ -1013,6 +1035,7 @@ function rrf(resultsA: ScoredResult[], resultsB: ScoredResult[], k = 60) {
 Runs alongside vector search for RRF fusion:
 
 Scoring:
+
 1. **Header match** (section title contains query tokens): weight 3
 2. **Section path match**: weight 2
 3. **Content body match**: weight 1
@@ -1022,7 +1045,7 @@ Fast. No embedding needed. Works in degraded mode.
 
 ### 7.4 Search Output
 
-```
+````
 $ doclab search "hono cors middleware"
 
 Search: "hono cors middleware" (3 results, 42ms)
@@ -1035,8 +1058,9 @@ Search: "hono cors middleware" (3 results, 42ms)
      origin: 'https://example.com',
      allowMethods: ['GET', 'POST'],
    }))
-   ```
-   hono v4.6.5, fetched 2026-06-08
+````
+
+hono v4.6.5, fetched 2026-06-08
 
 2. hono.dev — Hono > Middleware > Access Control (distance: 0.18, fusion: 0.028) [docs]
    Access control headers and CORS configuration options for Hono applications.
@@ -1045,14 +1069,17 @@ Search: "hono cors middleware" (3 results, 42ms)
 3. dev.to — CORS in Modern Web Frameworks (distance: 0.22, fusion: 0.019) [article]
    Comparing CORS setup across Hono, Express, and Fastify...
    dev.to, fetched 2026-06-07
+
 ```
 
 ### 7.5 Source Filtering
 
 ```
-doclab search "cors" --source hono     # only hono docs
-doclab search "hooks" --kind article   # only blog posts / articles
-```
+
+doclab search "cors" --source hono # only hono docs
+doclab search "hooks" --kind article # only blog posts / articles
+
+````
 
 ---
 
@@ -1069,11 +1096,12 @@ Before writing code with any framework or library, query doclab for current docs
 
 ```bash
 doclab search "<framework> <topic>"
-```
+````
 
 This returns documentation snippets with exact code examples from the latest sources.
 
 Tips:
+
 - Include framework name: "hono cors middleware"
 - Filter: doclab search "migrations" --source drizzle
 - Add sources: doclab add https://docs.example.com/guide
@@ -1082,7 +1110,8 @@ Tips:
 - Re-fetch: doclab pull
 
 doclab runs on http://127.0.0.1:{port}. Auto-starts on first search.
-```
+
+````
 
 ### 8.2 HTTP API
 
@@ -1139,7 +1168,7 @@ interface HealthResponse {
   ollama: "connected" | "unreachable" | "not-configured";
   uptime: number;
 }
-```
+````
 
 **Error responses:**
 
@@ -1147,22 +1176,23 @@ All errors follow this format:
 
 ```typescript
 interface ErrorResponse {
-  error: string;       // Human-readable message
-  code: string;        // Machine-readable error code
-  hint?: string;       // Optional: how to fix
+  error: string // Human-readable message
+  code: string // Machine-readable error code
+  hint?: string // Optional: how to fix
 }
 ```
 
-| Status | Code | When |
-|--------|------|------|
-| 400 | `BAD_REQUEST` | Missing required field (`"Missing 'query' field"`) |
-| 400 | `INVALID_SOURCE` | Source name not found (`"Source 'react' not found"`) |
-| 400 | `INVALID_URL` | URL malformed (`"Invalid URL: 'not-a-url'"`) |
-| 409 | `WRITE_IN_PROGRESS` | Another write operation running (`"Rebuild already in progress"`) |
-| 500 | `INTERNAL` | Unexpected server error (`"Failed to connect to Ollama"`) |
-| 503 | `NOT_READY` | Server starting up (`"Indexing in progress, retry in a few seconds"`) |
+| Status | Code                | When                                                                  |
+| ------ | ------------------- | --------------------------------------------------------------------- |
+| 400    | `BAD_REQUEST`       | Missing required field (`"Missing 'query' field"`)                    |
+| 400    | `INVALID_SOURCE`    | Source name not found (`"Source 'react' not found"`)                  |
+| 400    | `INVALID_URL`       | URL malformed (`"Invalid URL: 'not-a-url'"`)                          |
+| 409    | `WRITE_IN_PROGRESS` | Another write operation running (`"Rebuild already in progress"`)     |
+| 500    | `INTERNAL`          | Unexpected server error (`"Failed to connect to Ollama"`)             |
+| 503    | `NOT_READY`         | Server starting up (`"Indexing in progress, retry in a few seconds"`) |
 
 **Example:**
+
 ```json
 {
   "error": "Source 'nonexistent' not found",
@@ -1248,11 +1278,12 @@ No edges table. Documentation doesn't have import graphs.
 
 ```typescript
 function chunkHash(source: string, sectionPath: string): string {
-  return sha256(`${source}:${sectionPath}`).slice(0, 16);
+  return sha256(`${source}:${sectionPath}`).slice(0, 16)
 }
 ```
 
 Stable across rebuilds. Same source + same section path = same hash. Enables:
+
 - Detecting unchanged chunks on re-pull (hash matches → skip)
 - Deduplication within same source
 - Cache busting on content change (hash changes → delete old, insert new)
@@ -1282,6 +1313,7 @@ Timer-based. Configurable:
 ```
 
 On interval:
+
 1. For each source, fetch URL
 2. If 200 + hash changed → re-chunk, re-embed
 3. If 200 + unchanged → skip, update `fetched_at`
@@ -1292,7 +1324,7 @@ On interval:
 
 ```
 Added ──────────→ Active ──────────→ Removed
-  │                 │                   
+  │                 │
   │                 ├─ Fetch fails 1-2× → Active (consecutive_failures++)
   │                 ├─ Fetch fails 3×   → Removed (URL dead)
   │                 ├─ HTTP 404/410     → Removed (URL gone)
@@ -1323,7 +1355,9 @@ better-auth             https://better-auth.dev/llms-full.txt           204  30h
 
 total: 3
 ```
-  overreacted-hooks          —       8 chunks   fetched 3h ago    article
+
+overreacted-hooks — 8 chunks fetched 3h ago article
+
 ```
 
 `⚠` when `fetched_at` exceeds `rebuildInterval`.
@@ -1377,47 +1411,49 @@ total: 3
 ## 12. File Structure
 
 ```
+
 doclab/
 ├── src/
-│   ├── cli.ts                # CLI entry (thin HTTP client + lifecycle)
-│   ├── server-daemon.ts      # Background daemon (Bun.spawn)
-│   ├── server.ts             # HTTP server (routes, handlers)
-│   ├── config.ts             # dlconfig.json loading + validation
-│   ├── types.ts              # Shared TypeScript types
-│   ├── db.ts                 # SQLite setup, migrations, queries
-│   └── lib/
-│       ├── fetcher.ts        # URL fetch + ETag/hash diff + format detection
-│       ├── html-to-md.ts     # HTML → Markdown conversion (~150 lines)
-│       ├── chunker.ts        # Recursive markdown chunking (h2→h3→paragraph, fence-aware)
-│       ├── embedder.ts       # Multi-provider embedding (ollama, openai, voyage)
-│       ├── search.ts         # Hybrid search (vector + keyword + RRF)
-│       ├── ollama.ts         # Ollama API client
-│       └── agent-instructions.ts  # AGENTS.md snippet generation
+│ ├── cli.ts # CLI entry (thin HTTP client + lifecycle)
+│ ├── server-daemon.ts # Background daemon (Bun.spawn)
+│ ├── server.ts # HTTP server (routes, handlers)
+│ ├── config.ts # dlconfig.json loading + validation
+│ ├── types.ts # Shared TypeScript types
+│ ├── db.ts # SQLite setup, migrations, queries
+│ └── lib/
+│ ├── fetcher.ts # URL fetch + ETag/hash diff + format detection
+│ ├── html-to-md.ts # HTML → Markdown conversion (~150 lines)
+│ ├── chunker.ts # Recursive markdown chunking (h2→h3→paragraph, fence-aware)
+│ ├── embedder.ts # Multi-provider embedding (ollama, openai, voyage)
+│ ├── search.ts # Hybrid search (vector + keyword + RRF)
+│ ├── ollama.ts # Ollama API client
+│ └── agent-instructions.ts # AGENTS.md snippet generation
 ├── test/
-│   ├── fixtures/
-│   │   ├── basic.md          # Simple markdown
-│   │   ├── with-code.md      # Markdown with multiple code fences
-│   │   ├── blog-post.md      # Article-style (h1 only + paragraphs)
-│   │   ├── no-headers.md     # Markdown without any headers
-│   │   ├── dense-docs.md     # Many h3s under one h2
-│   │   ├── sample.html       # HTML page for conversion test
-│   │   └── real-world/       # Snapshots of actual pages
-│   ├── chunker.test.ts
-│   ├── html-to-md.test.ts
-│   ├── search.test.ts
-│   ├── fetcher.test.ts
-│   ├── embedder.test.ts
-│   ├── server.test.ts
-│   ├── cli.test.ts
-│   └── config.test.ts
+│ ├── fixtures/
+│ │ ├── basic.md # Simple markdown
+│ │ ├── with-code.md # Markdown with multiple code fences
+│ │ ├── blog-post.md # Article-style (h1 only + paragraphs)
+│ │ ├── no-headers.md # Markdown without any headers
+│ │ ├── dense-docs.md # Many h3s under one h2
+│ │ ├── sample.html # HTML page for conversion test
+│ │ └── real-world/ # Snapshots of actual pages
+│ ├── chunker.test.ts
+│ ├── html-to-md.test.ts
+│ ├── search.test.ts
+│ ├── fetcher.test.ts
+│ ├── embedder.test.ts
+│ ├── server.test.ts
+│ ├── cli.test.ts
+│ └── config.test.ts
 ├── docs/
-│   └── DOCLAB_SPEC.md
+│ └── DOCLAB_SPEC.md
 ├── dlconfig.example.json
 ├── package.json
 ├── tsconfig.json
 ├── README.md
 └── .gitignore
-```
+
+````
 
 ---
 
@@ -1453,14 +1489,14 @@ doclab/
     "bun": ">=1.1.0"
   }
 }
-```
+````
 
 ### 13.2 Dependencies
 
 Exactly **2** runtime deps:
 
-| Package | Why |
-|---------|-----|
+| Package      | Why                     |
+| ------------ | ----------------------- |
 | `sqlite-vec` | Vector search in SQLite |
 
 Everything else: Bun built-ins (`Bun.serve`, `bun:sqlite`, `fetch`, `Bun.spawn`, `fs`).
@@ -1473,19 +1509,19 @@ No LlamaIndex. No HTML parser library. No markdown library. No vector DB. Pure B
 
 ### 14.1 Test Categories
 
-| Category | Tests | What |
-|----------|-------|------|
-| `config` | 5 | dlconfig.json load, defaults, validation, edge cases |
-| `fetcher` | 6 | URL fetch, hash diff, ETag, error retry, HTML detection, redirect |
-| `html-to-md` | 6 | h1-h6 conversion, code fence preservation, inline code, link conversion, nav/sidebar removal, table handling |
-| `chunker` | 12 | recursive h2→h3→paragraph splitting, target 2500 chars, code fence preservation, fence balance check, breadcrumb inheritance, min chunk (100), merge small fragments, no-headers fallback, dense docs, content hash stability |
-| `embedder` | 5 | Provider create, batch embed, dimension detect, degraded fallback, API error handling |
-| `ollama` | 4 | Reachability, model detect, batch embed, error handling |
-| `search` | 9 | Vector search (mock embeddings), keyword search, RRF fusion, source filter, kind filter, empty results, degraded mode, topK limit, response format |
-| `server` | 9 | /health, /search (valid + missing query + source filter + kind filter), /sources, /add, /remove, /pull, /rebuild, error handling |
-| `cli` | 7 | start daemon, status, search, add, remove, list, mem |
-| `integration` | 4 | E2E: add → search, pull → update, remove → cleanup, rebuild (with real Ollama if available) |
-| **Total** | **~70** | **~14 test files** |
+| Category      | Tests   | What                                                                                                                                                                                                                          |
+| ------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config`      | 5       | dlconfig.json load, defaults, validation, edge cases                                                                                                                                                                          |
+| `fetcher`     | 6       | URL fetch, hash diff, ETag, error retry, HTML detection, redirect                                                                                                                                                             |
+| `html-to-md`  | 6       | h1-h6 conversion, code fence preservation, inline code, link conversion, nav/sidebar removal, table handling                                                                                                                  |
+| `chunker`     | 12      | recursive h2→h3→paragraph splitting, target 2500 chars, code fence preservation, fence balance check, breadcrumb inheritance, min chunk (100), merge small fragments, no-headers fallback, dense docs, content hash stability |
+| `embedder`    | 5       | Provider create, batch embed, dimension detect, degraded fallback, API error handling                                                                                                                                         |
+| `ollama`      | 4       | Reachability, model detect, batch embed, error handling                                                                                                                                                                       |
+| `search`      | 9       | Vector search (mock embeddings), keyword search, RRF fusion, source filter, kind filter, empty results, degraded mode, topK limit, response format                                                                            |
+| `server`      | 9       | /health, /search (valid + missing query + source filter + kind filter), /sources, /add, /remove, /pull, /rebuild, error handling                                                                                              |
+| `cli`         | 7       | start daemon, status, search, add, remove, list, mem                                                                                                                                                                          |
+| `integration` | 4       | E2E: add → search, pull → update, remove → cleanup, rebuild (with real Ollama if available)                                                                                                                                   |
+| **Total**     | **~70** | **~14 test files**                                                                                                                                                                                                            |
 
 ### 14.2 Test Fixtures
 
@@ -1518,6 +1554,7 @@ test/fixtures/
 Everything in this spec ships as v1.0. Single release.
 
 **Daemon & CLI:**
+
 - [x] Single global daemon (Bun.serve), auto-start on any command
 - [x] Idempotent startup: detect existing daemon via PID file, clean stale files
 - [x] Startup validation: sqlite-vec load, Ollama reachability, config parse
@@ -1530,6 +1567,7 @@ Everything in this spec ships as v1.0. Single release.
 - [x] Port auto-assignment with `~/.doclab/port` file
 
 **Content Pipeline:**
+
 - [x] Fetch any URL, auto-detect format (markdown / HTML) via Content-Type header
 - [x] HTML → Markdown conversion (~150 lines) + Mozilla Readability for content extraction (strips nav/ads/boilerplate)
 - [x] Jina AI fallback for Cloudflare-protected pages (Medium, etc.) — auto-proxy, API key optional
@@ -1540,6 +1578,7 @@ Everything in this spec ships as v1.0. Single release.
 - [x] Auto-name from `<title>` tag for HTML sources when `--name` not provided
 
 **Embedding & Search:**
+
 - [x] Multi-provider embeddings: Ollama (default), OpenAI, Voyage
 - [x] SQLite + sqlite-vec vector store with dimension-encoded table names
 - [x] Hybrid search: vector ANN + keyword token overlap + RRF fusion
@@ -1547,12 +1586,14 @@ Everything in this spec ships as v1.0. Single release.
 - [x] Degraded mode: keyword-only search when no embedding engine available
 
 **Freshness & Lifecycle:**
+
 - [x] Freshness tracking: `fetched_at`, `content_hash`, version detection
 - [x] Scheduled auto-rebuild (configurable interval, default 24h) + overdue check on startup (handles daemon idle-shutdown gap)
 - [x] Source lifecycle: URL 404/410 → remove; 3 consecutive fetch failures → remove
 - [x] Log file: `~/.doclab/logs/daemon.log` with timestamps for crons and lifecycle events
 
 **HTTP API:**
+
 - [x] `GET /health`, `POST /search`, `GET /sources`, `POST /add`, `POST /remove`, `POST /pull`, `POST /rebuild`
 - [x] Standard error response format: `{ error, code, hint? }`
 - [x] Write lock: 409 Conflict for concurrent write operations
@@ -1560,21 +1601,22 @@ Everything in this spec ships as v1.0. Single release.
 - [x] `doclab init` — AGENTS.md snippet generation
 
 **Testing:**
+
 - [x] 54 tests across 9 test files (chunker, html-to-md, fetcher, search, config, server, embedder, ollama, agent-instructions)
 
 ---
 
 ## Appendix A: Why No LlamaIndex
 
-| Concern | LlamaIndex | doclab |
-|---------|------------|--------|
-| Dependencies | ~20+ | 3 (sqlite-vec, readability, linkedom) |
-| Bundle size | ~5MB+ | ~460KB (bundled daemon) |
-| API surface | Giant. Settings, decorators, callbacks. | 5 functions: `fetch`, `htmlToMd`, `chunk`, `embed`, `search` |
-| Debugging | Framework internals | Your code. ~600 lines total. |
-| Version stability | LlamaIndex TS is young, APIs break | No framework to break |
-| Learning curve | Read LlamaIndex docs | Read 600 lines of TS |
-| Customization | Hope framework supports it | Edit the code |
+| Concern           | LlamaIndex                              | doclab                                                       |
+| ----------------- | --------------------------------------- | ------------------------------------------------------------ |
+| Dependencies      | ~20+                                    | 3 (sqlite-vec, readability, linkedom)                        |
+| Bundle size       | ~5MB+                                   | ~460KB (bundled daemon)                                      |
+| API surface       | Giant. Settings, decorators, callbacks. | 5 functions: `fetch`, `htmlToMd`, `chunk`, `embed`, `search` |
+| Debugging         | Framework internals                     | Your code. ~600 lines total.                                 |
+| Version stability | LlamaIndex TS is young, APIs break      | No framework to break                                        |
+| Learning curve    | Read LlamaIndex docs                    | Read 600 lines of TS                                         |
+| Customization     | Hope framework supports it              | Edit the code                                                |
 
 doclab crosses the complexity threshold only with sqlite-vec (ANN index, C extension). Everything else is standard library.
 
@@ -1584,13 +1626,13 @@ doclab crosses the complexity threshold only with sqlite-vec (ANN index, C exten
 
 Documents, articles, and tutorials are project-agnostic. Hono's CORS middleware works the same in any project. One index shared by all agents.
 
-| | Per-project | Global |
-|---|---|---|
-| Servers | N | 1 |
-| RAM | N × 350MB | 350MB |
-| Sources | Duplicated configs | Curated once |
-| Freshness | Some projects stale | One source of truth |
-| Agent integration | Discover per-project | Know one URL |
+|                   | Per-project          | Global              |
+| ----------------- | -------------------- | ------------------- |
+| Servers           | N                    | 1                   |
+| RAM               | N × 350MB            | 350MB               |
+| Sources           | Duplicated configs   | Curated once        |
+| Freshness         | Some projects stale  | One source of truth |
+| Agent integration | Discover per-project | Know one URL        |
 
 ---
 
@@ -1647,20 +1689,20 @@ Three tools partially overlap with doclab's problem space. None solve it fully.
 
 ### Comparison Matrix
 
-| | Context7 | mcp-local-rag | DevDocs.io | doclab |
-|---|---|---|---|---|
-| **Local/private** | ❌ Cloud + API key | ✅ | ✅ | ✅ |
-| **Any URL** | ❌ Library catalog | ❌ Local files only | ❌ Pre-bundled | ✅ |
-| **HTTP API** | ❌ MCP only | ❌ MCP/CLI | ❌ Web UI | ✅ |
-| **Global daemon** | N/A (cloud) | ❌ Per-invocation | ❌ Browser | ✅ |
-| **Agent-agnostic** | ❌ MCP-tied | ❌ MCP-tied | ❌ Browser | ✅ |
-| **Source lifecycle** | ❌ No visibility | ❌ No | ❌ Manual | ✅ Auto-rebuild + cleanup |
-| **Hybrid search** | ❌ Semantic only | ✅ Semantic + keyword | ❌ Keyword | ✅ Vector + keyword + RRF |
-| **HTML handling** | ✅ (curated) | ❌ File formats | N/A | ✅ Auto-convert |
-| **Embedding providers** | ❌ Cloud | ✅ Ollama | ❌ None | ✅ Ollama + OpenAI + Voyage |
-| **Degraded mode** | ❌ | ❌ | N/A | ✅ Keyword fallback |
-| **Open source** | ✅ (server closed) | ✅ | ✅ | ✅ |
-| **Dependencies** | Node + 20+ | Node + 20+ | Ruby/Rails | Bun + 3 (sqlite-vec, readability, linkedom) |
+|                         | Context7           | mcp-local-rag         | DevDocs.io     | doclab                                      |
+| ----------------------- | ------------------ | --------------------- | -------------- | ------------------------------------------- |
+| **Local/private**       | ❌ Cloud + API key | ✅                    | ✅             | ✅                                          |
+| **Any URL**             | ❌ Library catalog | ❌ Local files only   | ❌ Pre-bundled | ✅                                          |
+| **HTTP API**            | ❌ MCP only        | ❌ MCP/CLI            | ❌ Web UI      | ✅                                          |
+| **Global daemon**       | N/A (cloud)        | ❌ Per-invocation     | ❌ Browser     | ✅                                          |
+| **Agent-agnostic**      | ❌ MCP-tied        | ❌ MCP-tied           | ❌ Browser     | ✅                                          |
+| **Source lifecycle**    | ❌ No visibility   | ❌ No                 | ❌ Manual      | ✅ Auto-rebuild + cleanup                   |
+| **Hybrid search**       | ❌ Semantic only   | ✅ Semantic + keyword | ❌ Keyword     | ✅ Vector + keyword + RRF                   |
+| **HTML handling**       | ✅ (curated)       | ❌ File formats       | N/A            | ✅ Auto-convert                             |
+| **Embedding providers** | ❌ Cloud           | ✅ Ollama             | ❌ None        | ✅ Ollama + OpenAI + Voyage                 |
+| **Degraded mode**       | ❌                 | ❌                    | N/A            | ✅ Keyword fallback                         |
+| **Open source**         | ✅ (server closed) | ✅                    | ✅             | ✅                                          |
+| **Dependencies**        | Node + 20+         | Node + 20+            | Ruby/Rails     | Bun + 3 (sqlite-vec, readability, linkedom) |
 
 ### Unique Combination
 

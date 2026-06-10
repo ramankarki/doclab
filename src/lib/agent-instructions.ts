@@ -24,26 +24,6 @@ doclab first. Guesswork produces broken code.
 | \`doclab pull [name]\` | Re-fetch all or one source |
 | \`doclab rebuild\` | Drop DB, re-index everything |
 
-### Mandatory workflow before writing ANY code
-
-\`\`\`bash
-# 1. Check what sources are available
-doclab list
-
-# 2. If the package you need is missing, add it
-doclab add https://<package>.dev/llms-full.txt   # preferred
-doclab add https://<package>.dev/llms.txt         # fallback
-doclab add https://<package>.dev/docs/guide       # any URL works
-
-# 3. Check if existing sources are stale
-doclab status
-# If any show [stale] or fetched > rebuildInterval ago, refresh:
-doclab pull
-
-# 4. Query the latest docs before writing each function
-doclab search "<package> <specific topic>"
-\`\`\`
-
 ### When to query doclab
 
 Query doclab BEFORE:
@@ -82,5 +62,5 @@ doclab search "better auth session management"
 doclab search "react hooks pattern" --kind article
 doclab search "tanstack query useQuery options" --source tanstack
 \`\`\`
-`;
+`
 }

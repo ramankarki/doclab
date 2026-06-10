@@ -6,38 +6,36 @@
  * Falls back to raw HTML if Readability can't parse the page.
  */
 
-import { Readability } from "@mozilla/readability";
-import { parseHTML } from "linkedom";
+import { Readability } from '@mozilla/readability'
+import { parseHTML } from 'linkedom'
 
 export function extractContent(html: string): string {
   try {
-    const { document } = parseHTML(html);
+    const { document } = parseHTML(html)
 
     // Readability needs getBoundingClientRect on elements — mock it
     // (linkedom doesn't provide layout APIs)
-    patchForReadability(document);
+    patchForReadability(document)
 
-    const reader = new Readability(document);
-    const article = reader.parse();
+    const reader = new Readability(document)
+    const article = reader.parse()
 
     if (article?.textContent && article.textContent.length > 100) {
       // Reconstruct minimal HTML from extracted content
       // Readability gives us textContent and content (HTML string)
       if (article.content) {
-        return article.content;
+        return article.content
       }
       // Fallback: wrap text content in basic structure
-      const title = article.title
-        ? `<h1>${article.title}</h1>\n`
-        : "";
-      return `<!DOCTYPE html><html><body>${title}${article.textContent}</body></html>`;
+      const title = article.title ? `<h1>${article.title}</h1>\n` : ''
+      return `<!DOCTYPE html><html><body>${title}${article.textContent}</body></html>`
     }
   } catch (e) {
     // Readability failed — fall through to raw HTML
   }
 
   // Fallback: return original HTML
-  return html;
+  return html
 }
 
 /**
@@ -47,7 +45,7 @@ export function extractContent(html: string): string {
  */
 function patchForReadability(document: any): void {
   // Mock getBoundingClientRect on Element prototype
-  const ElementProto = document.defaultView?.Element?.prototype;
+  const ElementProto = document.defaultView?.Element?.prototype
   if (ElementProto && !ElementProto.getBoundingClientRect) {
     ElementProto.getBoundingClientRect = function () {
       return {
@@ -60,9 +58,9 @@ function patchForReadability(document: any): void {
         x: 0,
         y: 0,
         toJSON() {
-          return this;
-        },
-      };
-    };
+          return this
+        }
+      }
+    }
   }
 }

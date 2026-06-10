@@ -24,7 +24,8 @@
     "publish:dry": "npm pack --dry-run",
     "dev": "bun run --watch src/server.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "prettier": "^3.8.4",
     "typescript": "^5.7.0"
   },
   "engines": {

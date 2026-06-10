@@ -18,10 +18,13 @@ cross-origin requests to your API endpoints.
 ```ts
 import { cors } from 'hono/cors'
 const app = new Hono()
-app.use('*', cors({
-  origin: 'https://example.com',
-  allowMethods: ['GET', 'POST'],
-}))
+app.use(
+  '*',
+  cors({
+    origin: 'https://example.com',
+    allowMethods: ['GET', 'POST']
+  })
+)
 ```
 
 ### Rate Limiting
@@ -32,10 +35,13 @@ for preventing denial of service attacks and ensuring fair resource usage.
 
 ```ts
 import { rateLimiter } from 'hono/rate-limiter'
-app.use('*', rateLimiter({
-  windowMs: 60000,
-  max: 100,
-}))
+app.use(
+  '*',
+  rateLimiter({
+    windowMs: 60000,
+    max: 100
+  })
+)
 ```
 
 ### Logging
@@ -70,10 +76,13 @@ combined with custom authorization logic for fine-grained access control.
 
 ```ts
 import { basicAuth } from 'hono/basic-auth'
-app.use('/admin/*', basicAuth({
-  username: 'admin',
-  password: 'secret',
-}))
+app.use(
+  '/admin/*',
+  basicAuth({
+    username: 'admin',
+    password: 'secret'
+  })
+)
 ```
 
 ### Caching
