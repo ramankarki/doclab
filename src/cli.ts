@@ -18,6 +18,7 @@
 import { join } from 'node:path'
 import { existsSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
+import { createInterface } from 'node:readline'
 import { getDoclabDir, loadConfig, isValidUrl } from './config'
 import type { SearchResponse, HealthResponse, SourceMeta, ErrorResponse } from './types'
 import { generateAgentInstructions } from './lib/agent-instructions'
@@ -229,6 +230,9 @@ async function cmdAdd(args: string[]) {
       console.log(
         `${c.green}Added "${result.name}" — ${result.chunkCount} chunks indexed${c.reset}`
       )
+
+      // Suggest llms-full.txt / llms.txt at domain
+      await suggestFullDocs(url, port)
     } else {
       console.error(`${c.red}Failed to add source${c.reset}`)
       process.exit(1)
@@ -640,6 +644,84 @@ async function apiPost<T>(port: number, path: string, body: unknown): Promise<T 
       throw e
     }
     throw new Error(`Daemon unreachable on port ${port}`)
+  }
+}
+
+// ─── Prompt & Suggestion ───
+
+function prompt(question: string): Promise<string> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout
+  })
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close()
+      resolve(answer.trim())
+    })
+  })
+}
+
+async function suggestFullDocs(requestedUrl: string, port: number) {
+  try {
+    const domain = new URL(requestedUrl).origin
+
+    // Step 1: Check for llms-full.txt (preferred — single file with all docs)
+    const fullUrl = `${domain}/llms-full.txt`
+    const headRes = await fetch(fullUrl, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5000)
+    })
+
+    if (headRes.ok) {
+      const answer = await prompt(
+        `\n${c.info}Found full docs at ${c.reset}${fullUrl}${c.info}. Add them too? (y/N)${c.reset} `
+      )
+      if (answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes') {
+        console.log('Fetching...')
+        const result = await apiPost<SourceMeta>(port, '/add', { url: fullUrl })
+        if (result) {
+          console.log(
+            `${c.green}Added "${result.name}" — ${result.chunkCount} chunks indexed${c.reset}`
+          )
+        }
+      }
+      return
+    }
+
+    // Step 2: Check for llms.txt (only if user didn't already add it directly)
+    if (isLlmsTxtPath(requestedUrl)) return
+
+    const tocUrl = `${domain}/llms.txt`
+    const tocRes = await fetch(tocUrl, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5000)
+    })
+
+    if (tocRes.ok) {
+      const answer = await prompt(
+        `\n${c.info}Found docs index at ${c.reset}${tocUrl}${c.info}. Add full docs? (y/N)${c.reset} `
+      )
+      if (answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes') {
+        console.log('Fetching...')
+        const result = await apiPost<SourceMeta>(port, '/add', { url: tocUrl })
+        if (result) {
+          console.log(
+            `${c.green}Added "${result.name}" — ${result.chunkCount} chunks indexed${c.reset}`
+          )
+        }
+      }
+    }
+  } catch {
+    // Silently ignore connection errors during suggestion checks
+  }
+}
+
+function isLlmsTxtPath(url: string): boolean {
+  try {
+    return new URL(url).pathname.endsWith('/llms.txt')
+  } catch {
+    return false
   }
 }
 
