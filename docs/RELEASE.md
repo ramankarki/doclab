@@ -2,8 +2,6 @@
 
 Every push to `main` triggers an automated release pipeline. No manual version bumping or changelog writing.
 
-For setup details, see [`docs/PRODUCTION_NPM.md`](./PRODUCTION_NPM.md).
-
 ## Overview
 
 ```
@@ -18,13 +16,17 @@ git push main
   │   │
   │   └─ You review the PR → merge
   │       │
-  │       ├─ GitHub Release created (auto-generated notes)
-  │       ├─ Git tag pushed (v1.4.0)
-  │       │
-  │       └─ npm publish workflow triggers
-  │           ├─ prepublishOnly runs (build + test + typecheck)
-  │           └─ npm publish --provenance (signed by GitHub Actions)
+  │       └─ push to main triggers release-please again
+  │           │
+  │           ├─ GitHub Release created + Git tag pushed
+  │           │
+  │           └─ same workflow publishes to npm
+  │               ├─ bun install --frozen-lockfile
+  │               ├─ bun publish --provenance (signed by GitHub Actions)
+  │               └─ smoke test (doclab --version)
 ```
+
+Release-please and npm publish run in a **single combined workflow** using step outputs (`release_created`) to gate publication. No cross-workflow event chaining. No PAT needed.
 
 ## Commit Conventions
 
@@ -91,8 +93,8 @@ If release-please isn't working:
 git checkout main && git pull
 npm version minor -m "chore: release %s"
 git push --follow-tags
-# GitHub Release created automatically (auto-generated notes)
-# npm publish workflow triggers
+# Then publish manually:
+bun publish --provenance --access public
 ```
 
 ## npm Provenance
@@ -108,8 +110,7 @@ Source → Build → Publish chain is verifiable. No one can tamper with the pac
 | File | Purpose |
 |------|---------|
 | `.github/workflows/ci.yml` | Typecheck + test + build on push/PR |
-| `.github/workflows/release-please.yml` | Release PR automation |
-| `.github/workflows/npm-publish.yml` | Publish to npm on release |
+| `.github/workflows/release-please.yml` | Release PR + GitHub Release + npm publish |
 
 ## Checklist Before Publishing a Major Version (2.0.0)
 
