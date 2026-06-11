@@ -3,6 +3,7 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  workflow_call:
 
 jobs:
   test:
@@ -24,8 +25,4 @@ jobs:
             bunx commitlint --last --verbose
           fi
 
-      - run: bun run typecheck
-
-      - run: bun test
-
-      - run: bun run build
+      - run: bun run typecheck && bun test && bun run build
