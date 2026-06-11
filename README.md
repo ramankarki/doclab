@@ -1,5 +1,9 @@
 # doclab — Local Knowledge Server for Coding Agents
 
+[![CI](https://github.com/ramankarki/doclab/actions/workflows/ci.yml/badge.svg)](https://github.com/ramankarki/doclab/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/doclab)](https://www.npmjs.com/package/doclab)
+[![license](https://img.shields.io/npm/l/doclab)](https://github.com/ramankarki/doclab/blob/main/LICENSE)
+
 Agents write stale code because their training data is old. **doclab** gives them fresh documentation, articles, and technical references on demand — local, private, fast. Any URL: framework docs, blog posts, tutorials, API references, migration guides.
 
 ## Quick Start
@@ -82,7 +86,7 @@ Agent asks "how to use Bun with Drizzle ORM"
 
 - **Single global daemon** — one server, all projects, all agents
 - **Fetch pipeline** — direct fetch → Mozilla Readability (content extraction) → custom HTML→MD converter → recursive chunker
-- **Jina AI fallback** — Cloudflare-protected pages (Medium, etc.) auto-proxy through Jina AI reader
+- **Retry with backoff** — 3 attempts (1s, 2s) on transient fetch errors, Jina AI fallback after retries exhausted
 - **Semantic chunking** — splits on h2→h3→h4 headers, preserves code fences, targets ~2500 chars
 - **Hybrid search** — vector ANN + keyword token overlap + Reciprocal Rank Fusion
 - **SQLite + sqlite-vec** — zero infrastructure, WAL mode, concurrent reads
@@ -279,10 +283,13 @@ Search still works — just without semantic understanding.
 
 ```bash
 bun install
+bun prepare
 bun run build
-bun test              # 54 tests
+bun test              # 73 tests (commitlint + husky enforced)
 bun run typecheck
 ```
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/). Enforced via `commitlint` hook on commit + CI check on push. Format: `feat:`, `fix:`, `perf:`, `docs:`, `chore:`.
 
 ## License
 

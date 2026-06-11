@@ -4,6 +4,7 @@
   "description": "Local knowledge server for coding agents — fresh docs and articles on demand via HTTP",
   "type": "module",
   "license": "MIT",
+  "sideEffects": false,
   "homepage": "https://github.com/ramankarki/doclab#readme",
   "bugs": {
     "url": "https://github.com/ramankarki/doclab/issues"
@@ -18,9 +19,13 @@
     "dist",
     "README.md"
   ],
+  "exports": {
+    ".": "./dist/cli.js"
+  },
   "scripts": {
     "build": "bun build src/cli.ts --outdir dist --target bun && bun build src/server-daemon.ts --outdir dist --target bun",
     "prepublishOnly": "bun run build && bun test && bun run typecheck",
+    "prepare": "husky",
     "publish:dry": "npm pack --dry-run",
     "dev": "bun run --watch src/server.ts",
     "test": "bun test",
@@ -33,7 +38,10 @@
     "sqlite-vec": "^0.1"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
     "@types/bun": "latest",
+    "husky": "^9.1.7",
     "prettier": "^3.8.4",
     "typescript": "^5.7.0"
   },
