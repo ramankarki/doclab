@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.4.3](https://github.com/ramankarki/doclab/compare/doclab-v1.4.2...doclab-v1.4.3) (2026-06-11)
+
+
+### Bug Fixes
+
+* npm publish ([f3baeb7](https://github.com/ramankarki/doclab/commit/f3baeb70820f4e9c8e217a8cfa2f4e2f0a8b05ae))
+
 ## [1.4.2](https://github.com/ramankarki/doclab/compare/doclab-v1.4.1...doclab-v1.4.2) (2026-06-11)
 
 
