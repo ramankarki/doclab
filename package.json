@@ -24,7 +24,7 @@
   },
   "scripts": {
     "build": "bun build src/cli.ts --outdir dist --target bun && bun build src/server-daemon.ts --outdir dist --target bun",
-    "prepublishOnly": "bun run build && bun test && bun run typecheck",
+    "prepublishOnly": "bun run typecheck && bun test && bun run build",
     "prepare": "bun .husky/install.mjs",
     "publish:dry": "npm pack --dry-run",
     "dev": "bun run --watch src/server.ts",
