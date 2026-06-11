@@ -291,6 +291,17 @@ bun run typecheck
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/). Enforced via `commitlint` hook on commit + CI check on push. Format: `feat:`, `fix:`, `perf:`, `docs:`, `chore:`.
 
+## Contributing
+
+Conventional Commits required. Pre-commit hook runs `bun test`.
+
+```bash
+git checkout -b feat/my-feature
+# code... (pre-commit runs bun test)
+git commit -m "feat: add my feature"
+git push → open PR → CI runs (typecheck + test + build + commitlint)
+```
+
 ## License
 
 MIT
