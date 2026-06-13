@@ -667,7 +667,12 @@ async function suggestFullDocs(requestedUrl: string, port: number) {
     const domain = new URL(requestedUrl).origin
 
     // Step 1: Check for llms-full.txt (preferred — single file with all docs)
+    // Skip if user already requested llms-full.txt directly
     const fullUrl = `${domain}/llms-full.txt`
+    if (new URL(requestedUrl).pathname.endsWith('/llms-full.txt')) {
+      return
+    }
+
     const headRes = await fetch(fullUrl, {
       method: 'HEAD',
       signal: AbortSignal.timeout(5000)
