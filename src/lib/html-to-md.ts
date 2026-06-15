@@ -15,6 +15,16 @@ const turndown = new TurndownService({
 })
 turndown.use(gfm)
 
+// Skip empty anchor tags (ReSpec self-links, empty nav links)
+// <a href="#section"></a> → nothing (not even [](#section))
+turndown.addRule('emptyAnchor', {
+  filter: (node, options) => {
+    return node.nodeName === 'A' &&
+      (node.textContent?.trim() ?? '') === ''
+  },
+  replacement: () => ''
+})
+
 // Preserve Tab component labels from framework-specific doc markup
 // <Tab value="hono">code</Tab> → **Tab: hono**\ncode
 turndown.addRule('tab', {

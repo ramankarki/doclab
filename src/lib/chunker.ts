@@ -17,7 +17,9 @@ import type { RawChunk, FenceSpan } from '../types'
 
 const TARGET_CHUNK_SIZE = 2500
 const MIN_CHUNK_SIZE = 100
-const MERGE_THRESHOLD = 200
+// Merge adjacent paragraph-level chunks while combined size < 90% of target.
+// Prevents over-fragmentation from paragraph splitting.
+const MERGE_MAX = Math.floor(TARGET_CHUNK_SIZE * 0.9)
 
 export function chunkMarkdown(text: string, sourceName: string): RawChunk[] {
   const chunks = chunkRecursive(text, sourceName, '')
@@ -311,29 +313,37 @@ function splitOnParagraphs(text: string, _outerFenceSpans: FenceSpan[]): ChunkFr
 function mergeSmallChunks(chunks: ChunkFragment[]): ChunkFragment[] {
   if (chunks.length <= 1) return chunks
 
+  // Greedy merge: accumulate adjacent chunks while combined size stays under MERGE_MAX.
+  // Single chunks larger than MERGE_MAX are left alone.
   const result: ChunkFragment[] = []
   let buffer = ''
 
   for (const chunk of chunks) {
-    if (chunk.content.length < MERGE_THRESHOLD) {
-      // Small chunk — buffer it
+    const combinedSize = buffer
+      ? buffer.length + 2 + chunk.content.length  // +2 for '\n\n'
+      : chunk.content.length
+
+    if (chunk.content.length >= MERGE_MAX) {
+      // Large chunk — flush buffer first, then push this standalone
+      if (buffer) {
+        result.push({ content: buffer })
+        buffer = ''
+      }
+      result.push(chunk)
+    } else if (combinedSize <= MERGE_MAX) {
+      // Fits in buffer
       buffer = buffer ? buffer + '\n\n' + chunk.content : chunk.content
     } else {
-      // Large chunk
-      if (buffer) {
-        // Merge buffer into this chunk (prepend)
-        result.push({ content: buffer + '\n\n' + chunk.content })
-        buffer = ''
-      } else {
-        result.push(chunk)
-      }
+      // Would exceed target — flush buffer, start new one
+      result.push({ content: buffer })
+      buffer = chunk.content
     }
   }
 
   // Remaining buffer
   if (buffer) {
-    if (result.length > 0) {
-      // Merge with last chunk
+    if (result.length > 0 && result[result.length - 1].content.length + 2 + buffer.length <= TARGET_CHUNK_SIZE) {
+      // Merge trailing buffer into last chunk if it still fits target
       result[result.length - 1] = {
         content: result[result.length - 1].content + '\n\n' + buffer
       }
