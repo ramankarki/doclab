@@ -154,6 +154,7 @@ export type ProgressEvent =
   | { type: 'chunk:start' }
   | { type: 'chunk:done'; count: number }
   | { type: 'embed:start'; total: number }
+  | { type: 'embed:progress'; done: number; total: number }
   | { type: 'embed:done'; durationMs: number }
   | { type: 'result'; name: string; chunkCount: number }
   | { type: 'error'; message: string; code?: string }
@@ -169,5 +170,4 @@ export type ProgressEvent =
   | { type: 'rebuild:result' }
   | { type: 'llms-expand:start'; count: number }
   | { type: 'llms-expand:done'; failed: number }
-  | { type: 'subfetch:progress'; index: number; total: number; file: string }
   | { type: 'subfetch:progress'; index: number; total: number; file: string }

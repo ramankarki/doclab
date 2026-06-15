@@ -626,7 +626,9 @@ async function addSource(
       state.embeddingDims = dims
 
       const embedTexts = chunks.map((c) => `${c.sectionPath}\n${c.header}\n\n${c.content}`)
-      const embeddings = await state.embedder!.embedBatch(embedTexts)
+      const embeddings = await state.embedder!.embedBatch(embedTexts, (done, total) => {
+        onProgress?.({ type: 'embed:progress', done, total })
+      })
 
       for (let i = 0; i < chunks.length; i++) {
         if (embeddings[i]) {

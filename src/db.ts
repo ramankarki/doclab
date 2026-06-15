@@ -377,8 +377,7 @@ function rowToDocChunk(row: any): DocChunk {
 // ── Rebuild ──
 
 export function dropAllChunks(db: Database, dimensions?: number): void {
-  db.exec('DELETE FROM chunks')
-  db.exec('DELETE FROM chunks_fts')  /* FTS5 cleared manually: content= external table */
+  db.exec('DELETE FROM chunks')  /* triggers chunks_ad → cascades to FTS5 */
   if (dimensions) {
     const tableName = `chunk_embeddings_${dimensions}d`
     db.exec(`DELETE FROM ${tableName}`)

@@ -8,7 +8,7 @@
 import { ollamaEmbed, checkOllama } from './ollama'
 import type { EmbeddingConfig } from '../types'
 
-const BATCH_SIZE = 100 // Ollama batch limit
+const BATCH_SIZE = 256
 const OPENAI_BATCH = 2048
 const MAX_RETRIES = 3
 const RETRY_DELAYS = [1000, 2000, 4000] // ms
@@ -125,17 +125,22 @@ export class Embedder {
     return this._dimensions!
   }
 
-  async embedBatch(texts: string[]): Promise<Float32Array[]> {
+  async embedBatch(
+    texts: string[],
+    onProgress?: (done: number, total: number) => void
+  ): Promise<Float32Array[]> {
     if (texts.length === 0) return []
 
-    // Split into batches
     const batchSize = this.config.provider === 'ollama' ? BATCH_SIZE : OPENAI_BATCH
     const results: Float32Array[] = []
+    let done = 0
 
     for (let i = 0; i < texts.length; i += batchSize) {
       const batch = texts.slice(i, i + batchSize)
       const batchResults = await this.embedWithRetry(batch)
       results.push(...batchResults)
+      done += batchResults.length
+      onProgress?.(done, texts.length)
     }
 
     return results

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { DlConfig, SourceConfig } from './types'
@@ -144,7 +144,6 @@ export function saveConfig(config: DlConfig): void {
 }
 
 function saveConfigRaw(config: DlConfig): void {
-  const { writeFileSync } = require('node:fs')
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + '\n', 'utf-8')
 }
 

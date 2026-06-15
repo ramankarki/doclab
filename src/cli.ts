@@ -20,7 +20,13 @@ import { existsSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileS
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { getDoclabDir, loadConfig, isValidUrl } from './config'
-import type { SearchResponse, HealthResponse, SourceMeta, ErrorResponse, ProgressEvent } from './types'
+import type {
+  SearchResponse,
+  HealthResponse,
+  SourceMeta,
+  ErrorResponse,
+  ProgressEvent
+} from './types'
 import { generateAgentInstructions } from './lib/agent-instructions'
 import { c } from './lib/colors'
 
@@ -228,22 +234,20 @@ async function cmdAdd(args: string[]) {
       port,
       '/add',
       { url, name },
-      (e) => renderAddProgress(e)
+      (e) => renderProgress(e)
     )
-    console.log(
-      `\n${c.green}Added "${result.name}" — ${result.chunkCount} chunks indexed${c.reset}`
-    )
+    console.log(`${c.green}Added "${result.name}" — ${result.chunkCount} chunks indexed${c.reset}`)
     // Suggest llms-full.txt / llms.txt at domain
     await suggestFullDocs(url, port)
   } catch (streamErr: any) {
     // Bun streaming bug (#32120) — daemon may have crashed, retry non-streaming
     const fallbackPort = await ensureDaemonAlive()
-    console.log(`  ${c.dim}Retrying without streaming...${c.reset}`)
+    console.log(`${c.dim}Retrying without streaming...${c.reset}`)
     try {
       const result = await apiPost<SourceMeta>(fallbackPort, '/add', { url, name })
       if (result) {
         console.log(
-          `\n${c.green}Added "${result.name}" — ${result.chunkCount} chunks indexed${c.reset}`
+          `${c.green}Added "${result.name}" — ${result.chunkCount} chunks indexed${c.reset}`
         )
         await suggestFullDocs(url, fallbackPort)
       } else {
@@ -336,11 +340,8 @@ async function cmdPull(args: string[]) {
   const port = await ensureDaemon()
 
   try {
-    const result = await apiPostStream<{ updated: string[] }>(
-      port,
-      '/pull',
-      { name },
-      (e) => renderPullProgress(e)
+    const result = await apiPostStream<{ updated: string[] }>(port, '/pull', { name }, (e) =>
+      renderProgress(e)
     )
     if (result.updated.length > 0) {
       console.log(
@@ -352,7 +353,7 @@ async function cmdPull(args: string[]) {
   } catch (streamErr: any) {
     // Bun streaming bug (#32120) — retry non-streaming
     const fallbackPort = await ensureDaemonAlive()
-    console.log(`  ${c.dim}Retrying without streaming...${c.reset}`)
+    console.log(`${c.dim}Retrying without streaming...${c.reset}`)
     try {
       console.log('Pulling...')
       const result = await apiPost<{ updated: string[] }>(fallbackPort, '/pull', { name })
@@ -451,17 +452,12 @@ async function cmdRebuild() {
   const port = await ensureDaemon()
 
   try {
-    await apiPostStream<{ ok: boolean }>(
-      port,
-      '/rebuild',
-      {},
-      (e) => renderRebuildProgress(e)
-    )
+    await apiPostStream<{ ok: boolean }>(port, '/rebuild', {}, (e) => renderProgress(e))
     console.log(`\n${c.green}Rebuild complete${c.reset}`)
   } catch (streamErr: any) {
     // Bun streaming bug (#32120) — retry non-streaming
     const fallbackPort = await ensureDaemonAlive()
-    console.log(`  ${c.dim}Retrying without streaming...${c.reset}`)
+    console.log(`${c.dim}Retrying without streaming...${c.reset}`)
     try {
       console.log('Rebuilding...')
       await apiPost(fallbackPort, '/rebuild', {})
@@ -791,168 +787,70 @@ async function ensureDaemonAlive(): Promise<number> {
   return newPort
 }
 
-// ─── Progress renderers ───
+// ─── Progress renderer ───
 
-function renderAddProgress(e: ProgressEvent) {
+function renderProgress(e: ProgressEvent) {
   switch (e.type) {
     case 'fetch:start':
-      process.stdout.write(`  Fetching ${e.name}...`)
+      process.stdout.write(`Fetching ${e.name}...`)
       break
     case 'fetch:done':
-      console.log(` ${c.green}✓${c.reset} (${formatBytes(e.bytes)}, ${e.durationMs}ms)`)
+      console.log(`(${formatBytes(e.bytes)}, ${e.durationMs}ms)`)
       break
-    case 'llms-expand:start':
-      console.log(`  ${c.dim}Expanding ${e.count} sub-pages...${c.reset}`)
-      break
-    case 'llms-expand:done':
-      process.stdout.write('\r\x1b[2K\n')
-      if (e.failed > 0) {
-        console.log(`  ${c.warn}⚠ ${e.failed} sub-page(s) could not be fetched${c.reset}`)
-      }
-      break
-    case 'subfetch:progress': {
-        const msg = `  [${e.index}/${e.total}] Fetching ${e.file}...`
-        process.stdout.write(`\r${msg.slice(0, 60).padEnd(60)}`)
-        break
-      }
     case 'convert:start':
-      process.stdout.write('  Converting...')
+      process.stdout.write('Converting...')
       break
     case 'convert:done':
-      console.log(` ${c.green}✓${c.reset}`)
+      process.stdout.write('\n')
       break
     case 'chunk:start':
-      process.stdout.write('  Chunking...')
+      process.stdout.write('Chunking...')
       break
     case 'chunk:done':
-      console.log(` ${c.green}✓${c.reset} (${e.count} chunks)`)
+      console.log(`(${e.count} chunks)`)
       break
     case 'embed:start':
-      process.stdout.write(`  Embedding ${e.total} chunks...`)
+      process.stdout.write(`[0/${e.total}] Embedding chunks...`)
+      break
+    case 'embed:progress':
+      process.stdout.write(`\r\x1b[2K[${e.done}/${e.total}] Embedding chunks...`)
       break
     case 'embed:done':
-      console.log(` ${c.green}✓${c.reset} (${e.durationMs}ms)`)
+      console.log(`(${e.durationMs}ms)`)
       break
-  }
-}
-
-function renderPullProgress(e: ProgressEvent) {
-  switch (e.type) {
-    case 'pull:start':
-      if (e.total > 0) {
-        console.log(`Pulling ${e.total} source(s)...\n`)
-      }
+    case 'llms-expand:start':
+      console.log(`Expanding ${e.count} sub-pages...`)
+      break
+    case 'llms-expand:done':
+      process.stdout.write('\n')
+      if (e.failed > 0) console.log(`${e.failed} sub-page(s) could not be fetched`)
+      break
+    case 'subfetch:progress':
+      process.stdout.write(`\r\x1b[2K[${e.index}/${e.total}] Fetching ${e.file}...`)
+      break
+    case 'source:start':
+      console.log(`[${e.index}/${e.total}] ${e.name}`)
       break
     case 'source:skip':
-      console.log(`  ${c.bold}${e.name}${c.reset}  ${c.dim}up to date${c.reset}`)
-      break
-    case 'source:start':
-      console.log(`  ${c.bold}${e.name}${c.reset}`)
+      console.log(`${e.name} — up to date`)
       break
     case 'source:done':
-      console.log(`  ${c.green}✓${c.reset} ${c.dim}(${e.chunkCount} chunks)${c.reset}\n`)
+      console.log(`(${e.chunkCount} chunks)`)
       break
     case 'source:error':
-      console.log(`  ${c.error}✗${c.reset} ${e.message}\n`)
+      console.log(`FAILED: ${e.message}`)
       break
-    case 'fetch:start':
-      process.stdout.write('    Fetching...')
+    case 'pull:start':
+      if (e.total > 0) console.log(`Pulling ${e.total} source(s)...`)
       break
-    case 'fetch:done':
-      console.log(` ${c.green}✓${c.reset} (${formatBytes(e.bytes)}, ${e.durationMs}ms)`)
-      break
-    case 'llms-expand:start':
-      console.log(`    ${c.dim}Expanding ${e.count} sub-pages...${c.reset}`)
-      break
-    case 'llms-expand:done':
-      process.stdout.write('\r\x1b[2K\n')
-      if (e.failed > 0) {
-        console.log(`    ${c.warn}⚠ ${e.failed} sub-page(s) could not be fetched${c.reset}`)
-      }
-      break
-    case 'subfetch:progress': {
-        const msg = `    [${e.index}/${e.total}] Fetching ${e.file}...`
-        process.stdout.write(`\r${msg.slice(0, 64).padEnd(64)}`)
-        break
-      }
-    case 'convert:start':
-      process.stdout.write('    Converting...')
-      break
-    case 'convert:done':
-      console.log(` ${c.green}✓${c.reset}`)
-      break
-    case 'chunk:start':
-      process.stdout.write('    Chunking...')
-      break
-    case 'chunk:done':
-      console.log(` ${c.green}✓${c.reset} (${e.count} chunks)`)
-      break
-    case 'embed:start':
-      process.stdout.write(`    Embedding ${e.total} chunks...`)
-      break
-    case 'embed:done':
-      console.log(` ${c.green}✓${c.reset} (${e.durationMs}ms)`)
-      break
-  }
-}
-
-function renderRebuildProgress(e: ProgressEvent) {
-  switch (e.type) {
     case 'rebuild:drop':
-      process.stdout.write('  Dropping all chunks...')
+      process.stdout.write('Dropping all chunks...')
       break
     case 'rebuild:dropped':
-      console.log(` ${c.green}✓${c.reset}`)
+      process.stdout.write('\n')
       break
     case 'rebuild:start':
-      console.log(`  Re-indexing ${e.total} source(s)...\n`)
-      break
-    case 'source:start':
-      console.log(`  ${c.bold}[${e.index}/${e.total}] ${e.name}${c.reset}`)
-      break
-    case 'source:done':
-      console.log(`  ${c.green}✓${c.reset} ${c.dim}(${e.chunkCount} chunks)${c.reset}\n`)
-      break
-    case 'source:error':
-      console.log(`  ${c.error}✗${c.reset} ${e.message}\n`)
-      break
-    case 'fetch:start':
-      process.stdout.write('    Fetching...')
-      break
-    case 'fetch:done':
-      console.log(` ${c.green}✓${c.reset} (${formatBytes(e.bytes)}, ${e.durationMs}ms)`)
-      break
-    case 'llms-expand:start':
-      console.log(`    ${c.dim}Expanding ${e.count} sub-pages...${c.reset}`)
-      break
-    case 'llms-expand:done':
-      process.stdout.write('\r\x1b[2K\n')
-      if (e.failed > 0) {
-        console.log(`    ${c.warn}⚠ ${e.failed} sub-page(s) could not be fetched${c.reset}`)
-      }
-      break
-    case 'subfetch:progress': {
-        const msg = `    [${e.index}/${e.total}] Fetching ${e.file}...`
-        process.stdout.write(`\r${msg.slice(0, 64).padEnd(64)}`)
-        break
-      }
-    case 'convert:start':
-      process.stdout.write('    Converting...')
-      break
-    case 'convert:done':
-      console.log(` ${c.green}✓${c.reset}`)
-      break
-    case 'chunk:start':
-      process.stdout.write('    Chunking...')
-      break
-    case 'chunk:done':
-      console.log(` ${c.green}✓${c.reset} (${e.count} chunks)`)
-      break
-    case 'embed:start':
-      process.stdout.write(`    Embedding ${e.total} chunks...`)
-      break
-    case 'embed:done':
-      console.log(` ${c.green}✓${c.reset} (${e.durationMs}ms)`)
+      console.log(`Re-indexing ${e.total} source(s)...`)
       break
   }
 }

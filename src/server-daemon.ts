@@ -7,7 +7,7 @@
  */
 
 import { join } from 'node:path'
-import { writeFileSync, unlinkSync, appendFileSync, mkdirSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, unlinkSync, appendFileSync, mkdirSync, existsSync } from 'node:fs'
 import { createServer } from './server'
 import type { ServerState } from './server'
 import { Embedder } from './lib/embedder'
@@ -258,7 +258,6 @@ function startRebuildTimer(config: DlConfig) {
 
 function readPort(): number | null {
   try {
-    const { readFileSync } = require('node:fs')
     return parseInt(readFileSync(PORT_FILE, 'utf-8').trim()) || null
   } catch {
     return null
