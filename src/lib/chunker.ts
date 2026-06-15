@@ -153,14 +153,18 @@ function splitDeeper(
 
   if (sections.length >= 1) {
     const chunks: RawChunk[] = []
+    // When a section has no header (intro text before first sub-heading),
+    // inherit the parent heading name rather than leaving it empty.
+    const parentHeading = parentPath.split(' > ').pop() || sourceName
     for (const section of sections) {
       if (section.text.trim().length < MIN_CHUNK_SIZE) continue
 
-      const path = `${parentPath} > ${section.header}`
+      const header = section.header || parentHeading
+      const path = section.header ? `${parentPath} > ${section.header}` : parentPath
 
       if (section.text.trim().length <= TARGET_CHUNK_SIZE) {
         chunks.push({
-          header: section.header,
+          header,
           sectionPath: path,
           content: section.text.trim(),
           hasCodeBlocks: hasFences(section.text)
@@ -177,7 +181,7 @@ function splitDeeper(
           const merged = mergeSmallChunks(paraChunks)
           for (let i = 0; i < merged.length; i++) {
             chunks.push({
-              header: section.header,
+              header,
               sectionPath: merged.length > 1 ? `${path} #${i + 1}` : path,
               content: merged[i].content,
               hasCodeBlocks: hasFences(merged[i].content)
