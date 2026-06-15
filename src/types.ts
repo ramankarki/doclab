@@ -143,8 +143,3 @@ export interface RawChunk {
   content: string
   hasCodeBlocks: boolean
 }
-
-export interface FenceSpan {
-  start: number
-  end: number
-}

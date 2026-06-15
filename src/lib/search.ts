@@ -97,31 +97,31 @@ function keywordSearch(
   source?: string,
   kind?: string
 ): ScoredResult[] {
+  // Tokenize and escape for FTS5 query syntax (special chars: -, ", *, (, ))
   const tokens = query
     .toLowerCase()
-    .split(/[\s,.-]+/)
+    .replace(/[^\w\s]/g, ' ')  // strip punctuation (FTS5 tokenizer handles it anyway)
+    .split(/\s+/)
     .filter((t) => t.length > 1)
 
   if (tokens.length === 0) return []
 
-  const conditions = tokens.map(
-    () => `(c.header LIKE ? OR c.section_path LIKE ? OR c.content LIKE ?)`
-  )
+  // Build FTS5 MATCH query: tokens joined by OR
+  const matchQuery = tokens.map(t => `"${t.replace(/"/g, '""')}"`).join(' OR ')
 
+  // BM25: content weight=1.0, header=0.5, section_path=0.25
   let sql = `
     SELECT c.hash, c.source, c.section_path, c.header, c.content,
-           c.has_code_blocks, s.title, s.domain, s.kind, s.fetched_at, s.version
-    FROM chunks c
+           c.has_code_blocks, s.title, s.domain, s.kind, s.fetched_at, s.version,
+           bm25(chunks_fts, 1.0, 0.5, 0.25) AS rank
+    FROM chunks_fts f
+    JOIN chunks c ON c.id = f.rowid
     JOIN sources s ON c.source = s.name
-    WHERE c.stale = 0
-      AND (${conditions.join(' OR ')})
+    WHERE chunks_fts MATCH ?
+      AND c.stale = 0
   `
 
-  const params: string[] = []
-  for (const token of tokens) {
-    const p = `%${token}%`
-    params.push(p, p, p)
-  }
+  const params: any[] = [matchQuery]
 
   if (source) {
     sql += ` AND c.source = ?`
@@ -132,48 +132,30 @@ function keywordSearch(
     params.push(kind)
   }
 
-  sql += ` LIMIT ?`
-  params.push(String(limit))
+  sql += ` ORDER BY rank LIMIT ?`
+  params.push(limit)
 
   const rows = db.prepare(sql).all(...params) as any[]
 
-  // Score results based on match quality
-  const scored = rows.map((r: any, i: number) => {
-    let score = 0
-    const headerLower = (r.header ?? '').toLowerCase()
-    const pathLower = (r.section_path ?? '').toLowerCase()
-    const contentLower = (r.content ?? '').toLowerCase()
+  // Convert BM25 rank to distance-like score for RRF fusion.
+  // Lower BM25 = better. Invert so fusion works naturally.
+  const scores = rows.map((r: any) => ({
+    hash: r.hash,
+    source: r.source,
+    sectionPath: r.section_path,
+    header: r.header,
+    content: r.content,
+    hasCodeBlocks: Boolean(r.has_code_blocks),
+    distance: 1 / (1 + Math.abs(r.rank)),  // BM25 rank → distance (lower = better)
+    sourceTitle: r.title,
+    sourceDomain: r.domain,
+    sourceKind: r.kind,
+    sourceVersion: r.version,
+    fetchedAt: r.fetched_at,
+    rank: 0
+  }))
 
-    for (const token of tokens) {
-      if (headerLower.includes(token)) score += 10
-      if (pathLower.includes(token)) score += 2
-      if (contentLower.includes(token)) score += 1
-    }
-    const matchCount = tokens.filter(
-      (t) => headerLower.includes(t) || pathLower.includes(t) || contentLower.includes(t)
-    ).length
-    score *= matchCount
-
-    return {
-      hash: r.hash,
-      source: r.source,
-      sectionPath: r.section_path,
-      header: r.header,
-      content: r.content,
-      hasCodeBlocks: Boolean(r.has_code_blocks),
-      distance: 1 / (1 + score),
-      sourceTitle: r.title,
-      sourceDomain: r.domain,
-      sourceKind: r.kind,
-      sourceVersion: r.version,
-      fetchedAt: r.fetched_at,
-      rank: i
-    }
-  })
-
-  // Sort by score descending (distance ascending)
-  scored.sort((a, b) => (a.distance ?? 1) - (b.distance ?? 1))
-  return scored.map((r, i) => ({ ...r, rank: i }))
+  return scores.map((r, i) => ({ ...r, rank: i }))
 }
 
 // ── Reciprocal Rank Fusion ──

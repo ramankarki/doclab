@@ -425,7 +425,7 @@ async function addSource(
       ensureVecTable(db, dims)
       state.embeddingDims = dims
 
-      const embedTexts = chunks.map((c) => `${c.header}\n\n${c.content}`)
+      const embedTexts = chunks.map((c) => `${c.sectionPath}\n${c.header}\n\n${c.content}`)
       const embeddings = await state.embedder!.embedBatch(embedTexts)
 
       for (let i = 0; i < chunks.length; i++) {

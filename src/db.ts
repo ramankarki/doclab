@@ -132,6 +132,35 @@ function runMigrations(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source);
     CREATE INDEX IF NOT EXISTS idx_chunks_section ON chunks(section_path);
     CREATE INDEX IF NOT EXISTS idx_chunks_stale ON chunks(stale);
+
+    /* FTS5 full-text search with BM25 ranking.
+       content carries highest weight (the real text), header medium, section_path low. */
+    CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+      content,
+      header,
+      section_path,
+      content='chunks',
+      content_rowid='id'
+    );
+
+    /* Triggers to keep FTS5 in sync with chunks table.
+       INSERT OR REPLACE on chunks → auto-updates FTS5 index. */
+    CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
+      INSERT INTO chunks_fts(rowid, content, header, section_path)
+      VALUES (new.id, new.content, new.header, new.section_path);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
+      INSERT INTO chunks_fts(chunks_fts, rowid, content, header, section_path)
+      VALUES ('delete', old.id, old.content, old.header, old.section_path);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
+      INSERT INTO chunks_fts(chunks_fts, rowid, content, header, section_path)
+      VALUES ('delete', old.id, old.content, old.header, old.section_path);
+      INSERT INTO chunks_fts(rowid, content, header, section_path)
+      VALUES (new.id, new.content, new.header, new.section_path);
+    END;
   `)
 }
 
@@ -349,6 +378,7 @@ function rowToDocChunk(row: any): DocChunk {
 
 export function dropAllChunks(db: Database, dimensions?: number): void {
   db.exec('DELETE FROM chunks')
+  db.exec('DELETE FROM chunks_fts')  /* FTS5 cleared manually: content= external table */
   if (dimensions) {
     const tableName = `chunk_embeddings_${dimensions}d`
     db.exec(`DELETE FROM ${tableName}`)

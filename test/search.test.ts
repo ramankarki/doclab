@@ -1,13 +1,11 @@
 import { describe, test, expect } from 'bun:test'
 import { Database } from 'bun:sqlite'
+import { hybridSearch } from '../src/lib/search'
 
 /**
- * Search tests — test keyword search and RRF fusion.
+ * Search tests — test FTS5 keyword search and RRF fusion.
  * Vector search requires sqlite-vec which may not be available in test env.
  */
-
-// We test the search logic indirectly by testing keyword search behavior
-// and the RRF algorithm through its exported function patterns
 
 describe('search', () => {
   test('keyword tokenization works', () => {
@@ -20,7 +18,7 @@ describe('search', () => {
     expect(tokens).toEqual(['hono', 'cors', 'middleware'])
   })
 
-  test('keyword search finds content via SQLite', () => {
+  test('FTS5 keyword search finds content via BM25', () => {
     const db = new Database(':memory:')
 
     db.exec(`
@@ -51,54 +49,35 @@ describe('search', () => {
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
       );
+
+      CREATE VIRTUAL TABLE chunks_fts USING fts5(
+        content,
+        header,
+        section_path,
+        content='chunks',
+        content_rowid='id'
+      );
+
+      CREATE TRIGGER chunks_ai AFTER INSERT ON chunks BEGIN
+        INSERT INTO chunks_fts(rowid, content, header, section_path)
+        VALUES (new.id, new.content, new.header, new.section_path);
+      END;
     `)
 
     // Insert test data
-    db.prepare(
-      `
-      INSERT INTO sources (name, url, title, domain, kind)
-      VALUES ('hono', 'https://hono.dev', 'Hono Docs', 'hono.dev', 'docs')
-    `
-    ).run()
+    db.prepare(`INSERT INTO sources (name, url, title, domain, kind) VALUES ('hono', 'https://hono.dev', 'Hono Docs', 'hono.dev', 'docs')`).run()
+    db.prepare(`INSERT INTO chunks (hash, source, section_path, header, content) VALUES ('hash1', 'hono', 'Hono > Middleware > CORS', 'CORS', 'Cross-Origin Resource Sharing middleware for Hono. Use cors() to enable CORS.')`).run()
+    db.prepare(`INSERT INTO chunks (hash, source, section_path, header, content) VALUES ('hash2', 'hono', 'Hono > Middleware > Logger', 'Logger', 'Request logging middleware for Hono. Use logger() to log requests.')`).run()
 
-    db.prepare(
-      `
-      INSERT INTO chunks (hash, source, section_path, header, content)
-      VALUES ('hash1', 'hono', 'Hono > Middleware > CORS', '## CORS',
-              'Cross-Origin Resource Sharing middleware for Hono. Use cors() to enable CORS.')
-    `
-    ).run()
+    // Search via hybridSearch (keyword path goes through FTS5 + BM25)
+    const result = hybridSearch(db, null, 'cors middleware', 5, undefined)
+    expect(result.results.length).toBeGreaterThan(0)
+    expect(result.degraded).toBe(true)  // no vector = degraded, but keyword works
 
-    db.prepare(
-      `
-      INSERT INTO chunks (hash, source, section_path, header, content)
-      VALUES ('hash2', 'hono', 'Hono > Middleware > Logger', '## Logger',
-              'Request logging middleware for Hono. Use logger() to log requests.')
-    `
-    ).run()
-
-    // Keyword search
-    const query = 'cors middleware'
-    const tokens = query
-      .toLowerCase()
-      .split(/[\s,.-]+/)
-      .filter((t) => t.length > 1)
-
-    const conditions = tokens.map(() => `(header LIKE ? OR section_path LIKE ? OR content LIKE ?)`)
-    const params: string[] = []
-    for (const token of tokens) {
-      params.push(`%${token}%`, `%${token}%`, `%${token}%`)
-    }
-
-    const sql = `
-      SELECT * FROM chunks
-      WHERE stale = 0 AND (${conditions.join(' OR ')})
-      LIMIT 5
-    `
-
-    const rows = db.prepare(sql).all(...params) as any[]
-    expect(rows.length).toBeGreaterThan(0)
-    expect(rows[0].content).toContain('CORS')
+    // Should find the CORS chunk
+    const corsResult = result.results.find(r => r.header === 'CORS')
+    expect(corsResult).toBeDefined()
+    expect(corsResult!.content).toContain('CORS')
   })
 
   test('RRF fusion algorithm produces correct scores', () => {
