@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.4.4](https://github.com/ramankarki/doclab/compare/doclab-v1.4.3...doclab-v1.4.4) (2026-06-13)
+
+
+### Bug Fixes
+
+* skip re-prompt for already-added llms-full.txt ([3f30dd7](https://github.com/ramankarki/doclab/commit/3f30dd70e10aa94ec28e1672b873c336ec364470))
+
 ## [1.4.3](https://github.com/ramankarki/doclab/compare/doclab-v1.4.2...doclab-v1.4.3) (2026-06-11)
 
 
