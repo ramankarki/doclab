@@ -40,4 +40,4 @@ bun run dist/cli.js   # Run local CLI (not global doclab)
 - **Conventional Commits.** `feat:`, `fix:`, `perf:`, `docs:`, `chore:`.
 - **Surgical changes.** Touch only what the task requires. Don't refactor adjacent code.
 - **Read docs first.** `docs/HOW_IT_WORKS.md` for beginners. `docs/DOCLAB_SPEC.md` for full design. `README.md` for user-facing docs.
-- **Test local daemon.** Always test with `bun run dist/cli.js`, not global `doclab`.
+- **Test local daemon.** Always test with `bun run src/cli.ts`, not global `doclab`. Bun runs TS directly.
