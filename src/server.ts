@@ -339,17 +339,6 @@ function streamResponse(stream: ReadableStream): Response {
   })
 }
 
-function makeEmitter(controller: ReadableStreamDefaultController) {
-  const encoder = new TextEncoder()
-  return (e: ProgressEvent) => {
-    try {
-      controller.enqueue(encoder.encode(JSON.stringify(e) + '\n'))
-    } catch {
-      // Client disconnected — ignore
-    }
-  }
-}
-
 async function handleAddStream(req: Request, state: ServerState): Promise<Response> {
   if (state.isWriting) {
     return json({ error: 'Another operation in progress', code: 'WRITE_IN_PROGRESS' }, 409)
@@ -369,24 +358,35 @@ async function handleAddStream(req: Request, state: ServerState): Promise<Respon
   state.isWriting = true
 
   const stream = new ReadableStream({
-    async start(controller) {
-      const keepalive = streamKeepalive(controller)
-      const emit = makeEmitter(controller)
+    start(controller) {
+      const encoder = new TextEncoder()
+      const queue: Uint8Array[] = []
+      const emit = (e: ProgressEvent) => queue.push(encoder.encode(JSON.stringify(e) + '\n'))
 
-      try {
-        const result = await addSource(body.url, body.name, state, emit)
-        emit({ type: 'result', name: result.name, chunkCount: result.chunkCount })
-      } catch (e: any) {
-        if (e instanceof FetchError) {
-          emit({ type: 'error', message: e.message, code: e.code })
-        } else {
-          emit({ type: 'error', message: e.message })
+      const flush = () => {
+        while (queue.length > 0) {
+          try { controller.enqueue(queue.shift()!) } catch { return }
         }
-      } finally {
-        clearInterval(keepalive)
-        state.isWriting = false
-        try { controller.close() } catch {}
       }
+      const interval = setInterval(flush, 50)
+
+      addSource(body.url, body.name, state, emit)
+        .then((result) => {
+          emit({ type: 'result', name: result.name, chunkCount: result.chunkCount })
+        })
+        .catch((e: any) => {
+          if (e instanceof FetchError) {
+            emit({ type: 'error', message: e.message, code: e.code })
+          } else {
+            emit({ type: 'error', message: e.message })
+          }
+        })
+        .finally(() => {
+          clearInterval(interval)
+          flush()
+          state.isWriting = false
+          try { controller.close() } catch {}
+        })
     }
   })
 
@@ -413,21 +413,32 @@ async function handlePullStream(req: Request, state: ServerState): Promise<Respo
     : config.sources
 
   const stream = new ReadableStream({
-    async start(controller) {
-      const keepalive = streamKeepalive(controller)
-      const emit = makeEmitter(controller)
+    start(controller) {
+      const encoder = new TextEncoder()
+      const queue: Uint8Array[] = []
+      const emit = (e: ProgressEvent) => queue.push(encoder.encode(JSON.stringify(e) + '\n'))
 
-      try {
-        emit({ type: 'pull:start', total: sources.length })
-        const updated = await pullSources(body.name, state, emit)
-        emit({ type: 'pull:result', updated })
-      } catch (e: any) {
-        emit({ type: 'error', message: e.message })
-      } finally {
-        clearInterval(keepalive)
-        state.isWriting = false
-        try { controller.close() } catch {}
+      const flush = () => {
+        while (queue.length > 0) {
+          try { controller.enqueue(queue.shift()!) } catch { return }
+        }
       }
+      const interval = setInterval(flush, 50)
+
+      emit({ type: 'pull:start', total: sources.length })
+      pullSources(body.name, state, emit)
+        .then((updated) => {
+          emit({ type: 'pull:result', updated })
+        })
+        .catch((e: any) => {
+          emit({ type: 'error', message: e.message })
+        })
+        .finally(() => {
+          clearInterval(interval)
+          flush()
+          state.isWriting = false
+          try { controller.close() } catch {}
+        })
     }
   })
 
@@ -442,25 +453,31 @@ async function handleRebuildStream(state: ServerState): Promise<Response> {
   state.isWriting = true
 
   const stream = new ReadableStream({
-    async start(controller) {
-      const keepalive = streamKeepalive(controller)
-      const emit = makeEmitter(controller)
+    start(controller) {
+      const encoder = new TextEncoder()
+      const queue: Uint8Array[] = []
+      const emit = (e: ProgressEvent) => queue.push(encoder.encode(JSON.stringify(e) + '\n'))
 
-      try {
-        const db = getDb()
-        const dims = getDimensions()
+      const flush = () => {
+        while (queue.length > 0) {
+          try { controller.enqueue(queue.shift()!) } catch { return }
+        }
+      }
+      const interval = setInterval(flush, 50)
 
-        emit({ type: 'rebuild:drop' })
-        dropAllChunks(db, dims ?? undefined)
-        emit({ type: 'rebuild:dropped' })
+      const db = getDb()
+      const dims = getDimensions()
 
-        // Reload config
-        const { config: freshConfig } = loadConfig()
-        state.config = freshConfig
+      emit({ type: 'rebuild:drop' })
+      dropAllChunks(db, dims ?? undefined)
+      emit({ type: 'rebuild:dropped' })
 
-        const sources = freshConfig.sources
-        emit({ type: 'rebuild:start', total: sources.length })
+      const { config: freshConfig } = loadConfig()
+      state.config = freshConfig
+      const sources = freshConfig.sources
+      emit({ type: 'rebuild:start', total: sources.length })
 
+      ;(async () => {
         let idx = 0
         for (const src of sources) {
           idx++
@@ -473,29 +490,21 @@ async function handleRebuildStream(state: ServerState): Promise<Response> {
             emit({ type: 'source:error', index: idx, total: sources.length, name: src.name, message: e.message })
           }
         }
-
         emit({ type: 'rebuild:result' })
-      } catch (e: any) {
-        emit({ type: 'error', message: e.message })
-      } finally {
-        clearInterval(keepalive)
-        state.isWriting = false
-        try { controller.close() } catch {}
-      }
+      })()
+        .catch((e: any) => {
+          emit({ type: 'error', message: e.message })
+        })
+        .finally(() => {
+          clearInterval(interval)
+          flush()
+          state.isWriting = false
+          try { controller.close() } catch {}
+        })
     }
   })
 
   return streamResponse(stream)
-}
-
-// ─── Stream helpers ───
-
-function streamKeepalive(controller: ReadableStreamDefaultController): Timer {
-  const encoder = new TextEncoder()
-  // NDJSON comment lines are ignored by parsers, keep connection alive
-  return setInterval(() => {
-    try { controller.enqueue(encoder.encode(':keepalive\n')) } catch {}
-  }, 15000)
 }
 
 // ─── Core operations ───
