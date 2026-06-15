@@ -39,5 +39,5 @@ bun run dist/cli.js   # Run local CLI (not global doclab)
 - **Test before commit.** pre-commit hook runs `bun test`.
 - **Conventional Commits.** `feat:`, `fix:`, `perf:`, `docs:`, `chore:`.
 - **Surgical changes.** Touch only what the task requires. Don't refactor adjacent code.
-- **Read docs first.** `docs/DOCLAB_SPEC.md` for full design. `README.md` for user-facing docs.
-- **Test local daemon.** Always test with `bun src/cli.ts`, not global `doclab`.
+- **Read docs first.** `docs/HOW_IT_WORKS.md` for beginners. `docs/DOCLAB_SPEC.md` for full design. `README.md` for user-facing docs.
+- **Test local daemon.** Always test with `bun run dist/cli.js`, not global `doclab`.
