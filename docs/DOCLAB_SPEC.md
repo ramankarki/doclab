@@ -114,12 +114,12 @@ Agent asks "how to use Bun with Drizzle ORM"
 | **Any URL, not just llms.txt**     | Framework docs, blog posts, tutorials, migration guides — all same pipeline.                               |
 | **HTML → Markdown conversion**     | Preserves headings, code blocks, links. Non-markdown URLs handled automatically.                           |
 | **sqlite-vec**                     | Proven in codeview. WAL, transactions, concurrent reads. Zero infra.                                       |
-| **turndown + GFM for HTML→MD**      | Battle-tested library (3KB). Handles tables, code fences, nested lists, all edge cases. Replaces custom regex converter. |
+| **turndown + GFM for HTML→MD**      | Battle-tested library. Handles tables, code fences, nested lists, all edge cases. Replaces custom regex converter. |
 | **Custom semantic chunker**         | Splits on h2→h3→h4 headers, preserves code fences, targets 2500 chars. Paragraph fallback with fence-safe merging. No LlamaIndex. |
 | **No generation in v1**            | Agents are LLMs. They synthesize answers from raw chunks better than small local models.                   |
 | **Ollama default, multi-provider** | Same embedding abstraction as codeview. Free local, or paid API.                                           |
 | **Scheduled rebuilds**             | Content doesn't change while you code. 24h default.                                                        |
-| **Hybrid search**                  | Vector + keyword + RRF. Pure vector misses exact API names. Keyword catches them.                          |
+| **Hybrid search**                  | Vector + FTS5/BM25 keyword + RRF. Pure vector misses exact API names. BM25 catches them with statistical ranking. |
 | **URL death = cleanup**            | Source returns 404/410/connection failure → chunks removed. Dead links = dead knowledge.                   |
 | **Resource minimal**               | ~350MB total (nomic-embed-text + Bun + SQLite). Less than a Chrome tab.                                    |
 
@@ -931,20 +931,20 @@ Default: Ollama with `nomic-embed-text`. Recommended for quality + privacy + cos
 
 For each chunk:
 
-1. Build embedding text: `${chunk.header}\n\n${chunk.content}`
-   Include header in embedding text — improves retrieval relevance
+1. Build embedding text: `${chunk.sectionPath}\n${chunk.header}\n\n${chunk.content}`
+   Include section path + header in embedding text — improves retrieval relevance
 2. Call embedding API → Float32Array
 3. Store in SQLite:
    - INSERT chunk → get id
-   - INSERT INTO chunk*embeddings*{dim}d (rowid, embedding) VALUES (chunk.id, vec)
+   - INSERT INTO chunk_embeddings_{dim}d (rowid, embedding) VALUES (chunk.id, vec_f32(embedding))
 
 ````
 
-**Batch embedding (Ollama):** Send up to 100 texts per request. Reduces HTTP overhead.
+**Batch embedding (Ollama):** Send up to 256 texts per request. Reduces HTTP overhead.
 
 **Batch embedding (OpenAI/Voyage):** Send up to 2048 inputs per request.
 
-**Failure:** Retry 3× with exponential backoff (1s, 2s, 4s). After 3 failures, mark chunk `stale=1`. Continue. Print summary.
+**Failure:** Retry 3× with exponential backoff (1s, 2s, 4s). After 3 failures, skip chunk and continue. Chunks inserted before embedding — remain searchable via keyword.
 
 ### 6.3 SQLite + sqlite-vec Schema
 
@@ -1022,9 +1022,9 @@ Embed query text → vector
   ↓
 Two parallel paths:
   ┌──────────────────────┐  ┌──────────────────────┐
-  │ 1. Semantic (ANN)    │  │ 2. Keyword           │
-  │ vec0 MATCH query     │  │ Substring + token    │
-  │ Top K × 2            │  │ overlap on content   │
+  │ 1. Semantic (ANN)    │  │ 2. Keyword (FTS5)    │
+  │ vec0 MATCH query     │  │ BM25 ranking on      │
+  │ Top K × 2            │  │ content/header/path  │
   └────────┬─────────────┘  └──────────┬───────────┘
            │                           │
            └──────────┬────────────────┘
@@ -1054,16 +1054,22 @@ function rrf(resultsA: ScoredResult[], resultsB: ScoredResult[], k = 60) {
 }
 ```
 
-### 7.3 Keyword Search (Parallel Path)
+### 7.3 Keyword Search (FTS5 + BM25)
 
-Runs alongside vector search for RRF fusion:
+Runs alongside vector search for RRF fusion. Uses SQLite FTS5 full-text search with BM25 statistical ranking:
 
-Scoring:
+```sql
+SELECT *, bm25(chunks_fts, 1.0, 0.5, 0.25) AS rank
+FROM chunks_fts
+WHERE chunks_fts MATCH 'cors OR middleware OR configuration'
+ORDER BY rank
+```
 
-1. **Header match** (section title contains query tokens): weight 3
-2. **Section path match**: weight 2
-3. **Content body match**: weight 1
-4. Multiply by number of matching tokens
+**BM25 formula:** `score = term_frequency × inverse_doc_frequency ÷ document_length`
+
+Column weights (`1.0, 0.5, 0.25`): matches in `content` count fully, `header` at half weight, `section_path` at quarter weight.
+
+FTS5 index kept in sync via triggers on `chunks` table (INSERT/UPDATE/DELETE).
 
 Fast. No embedding needed. Works in degraded mode.
 
@@ -1445,29 +1451,30 @@ doclab/
 │ ├── types.ts # Shared TypeScript types
 │ ├── db.ts # SQLite setup, migrations, queries
 │ └── lib/
-│ ├── fetcher.ts # URL fetch + ETag/hash diff + format detection
-│ ├── html-to-md.ts # HTML → Markdown conversion (turndown + GFM, ~60 lines)
+│ ├── fetcher.ts # URL fetch + hash diff + format detection
+│ ├── html-to-md.ts # HTML → Markdown (turndown + GFM)
 │ ├── chunker.ts # Recursive markdown chunking (h2→h3→paragraph, fence-aware)
 │ ├── embedder.ts # Multi-provider embedding (ollama, openai, voyage)
-│ ├── search.ts # Hybrid search (vector + keyword + RRF)
+│ ├── search.ts # Hybrid search (vector + FTS5/BM25 + RRF)
 │ ├── ollama.ts # Ollama API client
+│ ├── colors.ts # Semantic ANSI color design tokens
 │ └── agent-instructions.ts # AGENTS.md snippet generation
 ├── test/
 │ ├── fixtures/
 │ │ ├── basic.md # Simple markdown
 │ │ ├── with-code.md # Markdown with multiple code fences
-│ │ ├── blog-post.md # Article-style (h1 only + paragraphs)
+│ │ ├── blog-post.md # Blog-style article
 │ │ ├── no-headers.md # Markdown without any headers
+│ │ ├── empty-sections.md # Sections under 100 chars
 │ │ ├── dense-docs.md # Many h3s under one h2
-│ │ ├── sample.html # HTML page for conversion test
-│ │ └── real-world/ # Snapshots of actual pages
+│ │ └── sample.html # HTML page for conversion test
 │ ├── chunker.test.ts
 │ ├── html-to-md.test.ts
 │ ├── search.test.ts
 │ ├── fetcher.test.ts
 │ ├── embedder.test.ts
 │ ├── server.test.ts
-│ ├── cli.test.ts
+│ ├── ollama.test.ts
 │ └── config.test.ts
 ├── docs/
 │ └── DOCLAB_SPEC.md
@@ -1488,44 +1495,51 @@ doclab/
 ```json
 {
   "name": "doclab",
-  "version": "0.1.0",
+  "version": "1.5.0",
   "description": "Local knowledge server for coding agents — fresh docs and articles on demand via HTTP",
   "type": "module",
   "license": "MIT",
-  "bin": {
-    "doclab": "./dist/cli.js"
-  },
+  "bin": { "doclab": "./dist/cli.js" },
   "files": ["dist", "README.md"],
   "scripts": {
     "build": "bun build src/cli.ts --outdir dist --target bun && bun build src/server-daemon.ts --outdir dist --target bun",
+    "prepublishOnly": "bun run typecheck && bun test && bun run build",
+    "prepare": "bun .husky/install.mjs",
     "dev": "bun run --watch src/server.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write ."
   },
   "dependencies": {
-    "sqlite-vec": "^0.1"
+    "sqlite-vec": "^0.1",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
     "@types/bun": "latest",
-    "typescript": "^6.0.3"
+    "husky": "^9.1.7",
+    "prettier": "^3.8.4",
+    "typescript": "^5.7.0"
   },
-  "engines": {
-    "bun": ">=1.1.0"
-  }
+  "engines": { "bun": ">=1.1.0" }
 }
 ````
 
 ### 13.2 Dependencies
 
-Exactly **2** runtime deps:
+Exactly **3** runtime deps:
 
-| Package      | Why                     |
-| ------------ | ----------------------- |
-| `sqlite-vec` | Vector search in SQLite |
+| Package                | Why                            |
+| ---------------------- | ------------------------------ |
+| `sqlite-vec`           | Vector search in SQLite        |
+| `turndown`             | HTML → Markdown conversion     |
+| `turndown-plugin-gfm`  | GFM tables, strikethrough, etc |
 
 Everything else: Bun built-ins (`Bun.serve`, `bun:sqlite`, `fetch`, `Bun.spawn`, `fs`).
 
-No LlamaIndex. No HTML parser library. No markdown library. No vector DB. Pure Bun.
+No LlamaIndex. No vector DB server. No heavy ML frameworks.
 
 ---
 
@@ -1533,19 +1547,17 @@ No LlamaIndex. No HTML parser library. No markdown library. No vector DB. Pure B
 
 ### 14.1 Test Categories
 
-| Category      | Tests   | What                                                                                                                                                                                                                          |
-| ------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config`      | 5       | dlconfig.json load, defaults, validation, edge cases                                                                                                                                                                          |
-| `fetcher`     | 6       | URL fetch, hash diff, ETag, error retry, HTML detection, redirect                                                                                                                                                             |
-| `html-to-md`  | 11      | turndown + GFM: headings, code blocks, inline code, links, lists, emphasis, tables, HTML entities, nav/footer removal, Tab component labels, empty anchor stripping                                                                                                                  |
-| `chunker`     | 12      | recursive h2→h3→paragraph splitting, target 2500 chars, code fence preservation, fence balance check, breadcrumb inheritance, min chunk (100), merge small fragments, no-headers fallback, dense docs, content hash stability |
-| `embedder`    | 5       | Provider create, batch embed, dimension detect, degraded fallback, API error handling                                                                                                                                         |
-| `ollama`      | 4       | Reachability, model detect, batch embed, error handling                                                                                                                                                                       |
-| `search`      | 9       | Vector search (mock embeddings), keyword search, RRF fusion, source filter, kind filter, empty results, degraded mode, topK limit, response format                                                                            |
-| `server`      | 9       | /health, /search (valid + missing query + source filter + kind filter), /sources, /add, /remove, /pull, /rebuild, error handling                                                                                              |
-| `cli`         | 7       | start daemon, status, search, add, remove, list, mem                                                                                                                                                                          |
-| `integration` | 4       | E2E: add → search, pull → update, remove → cleanup, rebuild (with real Ollama if available)                                                                                                                                   |
-| **Total**     | **~70** | **~14 test files**                                                                                                                                                                                                            |
+| Category      | Tests | What                                                                                                                                                                                                                          |
+| ------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chunker`     | 9     | recursive h2→h3→paragraph splitting, target 2500 chars, code fence preservation, breadcrumb inheritance, min chunk (100), no-headers fallback, dense docs, content hash stability                                              |
+| `html-to-md`  | 11    | turndown + GFM: headings, code blocks, inline code, links, lists, emphasis, tables, HTML entities, nav/footer removal, Tab component labels, empty anchor stripping                                                            |
+| `search`      | 5     | FTS5 + BM25 keyword search, RRF fusion, tokenization, empty query, short token filtering                                                                                                                                       |
+| `fetcher`     | 26    | fetchAndConcat (empty, partial failure, all fail, order-preserving), isLlmsTxtUrl (12 cases), extractRelativeLinks (9 cases), chunkHash, hashContent, FetchError, invalid URL                                                  |
+| `server`      | 6     | health endpoint, sources listing, keyword search via SQL, source filter, delete cascade, stale chunk exclusion                                                                                                                 |
+| `config`      | 7     | dlconfig.json load, defaults, validation, persistence round-trip, add, update, remove                                                                                                                                          |
+| `embedder`    | 7     | Provider create (ollama/openai/voyage), default model, dimension caching, detect unreachable, empty batch                                                                                                                      |
+| `ollama`      | 2     | Unreachable port, default URL connectivity                                                                                                                                                                                     |
+| **Total**     | **73** | **8 test files**                                                                                                                                                                                                              |
 
 ### 14.2 Test Fixtures
 
@@ -1553,23 +1565,19 @@ No LlamaIndex. No HTML parser library. No markdown library. No vector DB. Pure B
 test/fixtures/
 ├── basic.md              # Minimal: h1, 2 h2s, plain text
 ├── with-code.md          # h2s with code fences (ts, json, bash)
-├── blog-post.md          # Article: h1 only, paragraphs, code blocks
+├── blog-post.md          # Article: h2s, paragraphs, code blocks
 ├── no-headers.md         # No markdown headers at all
 ├── empty-sections.md     # h2s with <100 char content (should be skipped)
 ├── dense-docs.md         # h2 with 8 h3 sub-sections (test h3 overflow split)
-├── sample.html           # Realistic HTML page
-└── real-world/           # Snapshots of actual content
-    ├── hono-v4.6.txt     # llms-full.txt
-    ├── drizzle-v0.38.txt # llms-full.txt
-    └── overreacted-hooks.html  # Blog post
+└── sample.html           # Realistic HTML page for conversion test
 ```
 
 ### 14.3 Mock Strategy
 
-- **Ollama API:** Mock HTTP JSON responses for embedder isolation
-- **Fetch:** Mock `fetch` with known fixture content
-- **sqlite-vec:** Real SQLite with vec0 (Bun test runner supports it)
-- **Bun.serve:** Real HTTP server for integration tests
+- **Ollama API:** Test connectivity via non-existent port. Embedding tests use OpenAI provider for deterministic dimension checks.
+- **Fetch:** Test with real `Bun.serve` on random ports for HTTP fetch + concat behavior.
+- **sqlite-vec:** In-memory SQLite (`:memory:`) with FTS5. vec0 tested indirectly via daemon integration.
+- **Bun.serve:** Real HTTP server for fetcher tests and endpoint logic tests.
 
 ---
 
@@ -1605,7 +1613,7 @@ Everything in this spec ships as v1.0. Single release.
 
 - [x] Multi-provider embeddings: Ollama (default), OpenAI, Voyage
 - [x] SQLite + sqlite-vec vector store with dimension-encoded table names
-- [x] Hybrid search: vector ANN + keyword token overlap + RRF fusion
+- [x] Hybrid search: vector ANN + FTS5/BM25 keyword + RRF fusion
 - [x] Source filtering (`--source`) and kind filtering (`--kind`)
 - [x] Degraded mode: keyword-only search when no embedding engine available
 
@@ -1634,8 +1642,8 @@ Everything in this spec ships as v1.0. Single release.
 
 | Concern           | LlamaIndex                              | doclab                                                       |
 | ----------------- | --------------------------------------- | ------------------------------------------------------------ |
-| Dependencies      | ~20+                                    | 3 (sqlite-vec, turndown, turndown-plugin-gfm)                        |
-| Bundle size       | ~5MB+                                   | ~460KB (bundled daemon)                                      |
+| Dependencies      | ~20+                                    | 3 (sqlite-vec, turndown, turndown-plugin-gfm)                |
+| Bundle size       | ~5MB+                                   | ~590KB (bundled daemon)                                       |
 | API surface       | Giant. Settings, decorators, callbacks. | 5 functions: `fetch`, `htmlToMd`, `chunk`, `embed`, `search` |
 | Debugging         | Framework internals                     | Your code. ~600 lines total.                                 |
 | Version stability | LlamaIndex TS is young, APIs break      | No framework to break                                        |

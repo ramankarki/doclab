@@ -180,7 +180,7 @@ Here's the key insight: **similar text produces similar numbers.** The first two
 
 ### How doclab embeds
 
-doclab takes each chunk and combines the header + content into one string:
+doclab takes each chunk and combines the section path + header + content into one string:
 
 ```ts
 // What gets embedded:
@@ -193,7 +193,7 @@ doclab takes each chunk and combines the header + content into one string:
 It sends this text to **Ollama**, a program running on your computer that hosts AI models. Specifically, it uses a model called `nomic-embed-text` which is trained to convert text to embeddings.
 
 ```ts
-const embedTexts = chunks.map(c => `${c.header}\n\n${c.content}`)
+const embedTexts = chunks.map(c => `${c.sectionPath}\n${c.header}\n\n${c.content}`)
 const embeddings = await ollama.embed(embedTexts)
 ```
 
@@ -274,7 +274,7 @@ const queryEmbedding = embeddings[0]
 
 This places your query into the same coordinate system as your indexed chunks — right near "CORS Middleware" and "Basic Auth", far from "Select schema".
 
-**One difference from chunk embedding:** chunks get `header + content` so the model understands the section context. Queries are just raw text — what the user typed. The query IS the context, so there's nothing to prepend.
+**One difference from chunk embedding:** chunks get `sectionPath + header + content` so the model understands where the section lives in the documentation hierarchy. Queries are just raw text — what the user typed. The query IS the context, so there's nothing to prepend.
 
 ```ts
 // Chunk embedding (Step 4):
@@ -386,7 +386,7 @@ doclab add https://hono.dev/llms-full.txt
 |----------|--------|
 | **Markdown, not HTML** | Clean text, predictable structure. Headings (`##`) make chunking easy. |
 | **Semantic chunks, not fixed-size** | A section about CORS is one idea. Splitting it mid-sentence would lose context. |
-| **Header + content embedded** | The header gives context ("CORS Middleware") that helps the embedding understand what the content is about. |
+| **Section path + header + content embedded** | The section path and header give context ("hono > Middleware > CORS") that helps the embedding understand where the chunk lives. |
 | **Hybrid search, not just vector** | Vector search is great for concepts. But if you search for `cors()`, you want the exact function — keyword search catches that. |
 | **Local, not cloud** | No API costs. No internet required. Your docs stay on your machine. 34ms latency because there's no network round-trip. |
 | **SQLite, not Elasticsearch** | One file. Zero setup. WAL mode handles concurrent reads. sqlite-vec adds vector search without leaving SQLite. |

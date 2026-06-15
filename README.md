@@ -89,7 +89,7 @@ Agent asks "how to use Bun with Drizzle ORM"
 - **Retry with backoff** — 3 attempts (1s, 2s) on transient fetch errors, Jina AI fallback after retries exhausted
 - **New to embeddings/vector search?** Read the [beginner's guide](docs/HOW_IT_WORKS.md).
 - **Semantic chunking** — splits on h2→h3→h4 headers, preserves code fences, targets ~2500 chars
-- **Hybrid search** — vector ANN + keyword token overlap + Reciprocal Rank Fusion
+- **Hybrid search** — vector ANN + FTS5/BM25 keyword + Reciprocal Rank Fusion
 - **SQLite + sqlite-vec** — zero infrastructure, WAL mode, concurrent reads
 - **Auto-rebuild** — configurable timer (default 24h) re-fetches sources, removes dead URLs
 
@@ -274,7 +274,7 @@ Daemon logs are written to `~/.doclab/logs/daemon.log`:
 
 If no embedding engine is reachable:
 
-- `search` falls back to keyword-only (case-insensitive substring + token overlap)
+- `search` falls back to keyword-only (FTS5 full-text search with BM25 ranking)
 - Response includes `degraded: true`
 - Server prints hint: `Install ollama: brew install ollama && ollama pull nomic-embed-text`
 
