@@ -804,6 +804,17 @@ function renderAddProgress(e: ProgressEvent) {
     case 'llms-expand:start':
       console.log(`  ${c.dim}Expanding ${e.count} sub-pages...${c.reset}`)
       break
+    case 'llms-expand:done':
+      process.stdout.write('\n')
+      if (e.failed > 0) {
+        console.log(`  ${c.warn}⚠ ${e.failed} sub-page(s) could not be fetched${c.reset}`)
+      }
+      break
+    case 'subfetch:progress':
+      process.stdout.write(
+        `\r  [${e.index}/${e.total}] Fetching ${e.file}...`.padEnd(60)
+      )
+      break
     case 'convert:start':
       process.stdout.write('  Converting...')
       break
@@ -852,6 +863,17 @@ function renderPullProgress(e: ProgressEvent) {
       break
     case 'llms-expand:start':
       console.log(`    ${c.dim}Expanding ${e.count} sub-pages...${c.reset}`)
+      break
+    case 'llms-expand:done':
+      process.stdout.write('\n')
+      if (e.failed > 0) {
+        console.log(`    ${c.warn}⚠ ${e.failed} sub-page(s) could not be fetched${c.reset}`)
+      }
+      break
+    case 'subfetch:progress':
+      process.stdout.write(
+        `\r    [${e.index}/${e.total}] Fetching ${e.file}...`.padEnd(64)
+      )
       break
     case 'convert:start':
       process.stdout.write('    Converting...')
@@ -902,6 +924,17 @@ function renderRebuildProgress(e: ProgressEvent) {
       break
     case 'llms-expand:start':
       console.log(`    ${c.dim}Expanding ${e.count} sub-pages...${c.reset}`)
+      break
+    case 'llms-expand:done':
+      process.stdout.write('\n')
+      if (e.failed > 0) {
+        console.log(`    ${c.warn}⚠ ${e.failed} sub-page(s) could not be fetched${c.reset}`)
+      }
+      break
+    case 'subfetch:progress':
+      process.stdout.write(
+        `\r    [${e.index}/${e.total}] Fetching ${e.file}...`.padEnd(64)
+      )
       break
     case 'convert:start':
       process.stdout.write('    Converting...')

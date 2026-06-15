@@ -168,4 +168,6 @@ export type ProgressEvent =
   | { type: 'rebuild:dropped' }
   | { type: 'rebuild:result' }
   | { type: 'llms-expand:start'; count: number }
-  | { type: 'llms-expand:done' }
+  | { type: 'llms-expand:done'; failed: number }
+  | { type: 'subfetch:progress'; index: number; total: number; file: string }
+  | { type: 'subfetch:progress'; index: number; total: number; file: string }

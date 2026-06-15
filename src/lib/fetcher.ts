@@ -306,10 +306,11 @@ export function isLlmsTxtUrl(url: string): boolean {
 export async function fetchAndConcat(
   urls: string[],
   jinaApiKey?: string,
-  concurrency = 5
-): Promise<string> {
+  concurrency = 5,
+  onProgress?: (e: import('../types').ProgressEvent) => void
+): Promise<{ content: string; failed: number }> {
   const total = urls.length
-  if (total === 0) return ''
+  if (total === 0) return { content: '', failed: 0 }
   const results: string[] = new Array(total)
   const failed: { url: string; error: string }[] = []
 
@@ -320,8 +321,7 @@ export async function fetchAndConcat(
       batch.map(async (u, bi) => {
         const idx = i + bi
         const fileName = u.split('/').pop() || u
-        const msg = `  [${idx + 1}/${total}] Fetching ${fileName}...`
-        process.stderr.write(`\r${msg}\x1b[K`)
+        onProgress?.({ type: 'subfetch:progress', index: idx + 1, total, file: fileName })
         const result = await fetchUrl(u, jinaApiKey)
         // Convert HTML sub-pages to markdown before concatenating
         if (result.isHtml && !result.isMarkdown) {
@@ -340,8 +340,6 @@ export async function fetchAndConcat(
     }
   }
 
-  process.stderr.write('\n')
-
   if (failed.length > 0) {
     const names = failed.map((f) => f.url.split('/').pop() || f.url).join(', ')
     console.warn(
@@ -357,7 +355,7 @@ export async function fetchAndConcat(
     )
   }
 
-  return succeeded.join('\n\n')
+  return { content: succeeded.join('\n\n'), failed: failed.length }
 }
 
 export function extractRelativeLinks(content: string, baseUrl: string): string[] {

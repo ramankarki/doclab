@@ -11,8 +11,8 @@ import {
 
 describe('fetchAndConcat', () => {
   test('returns empty string for empty array', async () => {
-    const result = await fetchAndConcat([])
-    expect(result).toBe('')
+    const { content } = await fetchAndConcat([])
+    expect(content).toBe('')
   })
 
   test('warns on partial failure, returns successful pages', async () => {
@@ -32,13 +32,13 @@ describe('fetchAndConcat', () => {
 
     try {
       const base = `http://127.0.0.1:${server.port}`
-      const result = await fetchAndConcat([
+      const { content } = await fetchAndConcat([
         `${base}/ok.md`,
         'http://127.0.0.1:19999/nope.md',
         `${base}/ok.md`
       ])
       // Returns successful pages, skip failures
-      expect(result).toContain('# OK')
+      expect(content).toContain('# OK')
       // Warning logged to stderr (can't easily assert, but no throw)
     } finally {
       server.stop()
@@ -81,16 +81,16 @@ describe('fetchAndConcat', () => {
 
     try {
       const base = `http://127.0.0.1:${server.port}`
-      const result = await fetchAndConcat([
+      const { content } = await fetchAndConcat([
         `${base}/page1.md`,
         `${base}/page2.md`,
         `${base}/page3.md`
       ])
 
-      expect(result).toContain('# Page 1')
-      expect(result).toContain('# Page 2')
-      expect(result).toContain('# Page 3')
-      expect(result).toBe(
+      expect(content).toContain('# Page 1')
+      expect(content).toContain('# Page 2')
+      expect(content).toContain('# Page 3')
+      expect(content).toBe(
         '# Page 1\n\nContent one.\n\n# Page 2\n\nContent two.\n\n# Page 3\n\nContent three.'
       )
     } finally {

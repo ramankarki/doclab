@@ -542,12 +542,11 @@ async function addSource(
       )
     }
     onProgress?.({ type: 'llms-expand:start', count: links.length })
-    console.log(
-      `${c.info}[doclab]${c.reset} Expanding llms.txt: ${links.length} sub-pages...`
-    )
     try {
-      const expanded = await fetchAndConcat(links, state.config.jinaApiKey)
-      onProgress?.({ type: 'llms-expand:done' })
+      const { content: expanded, failed: failedCount } = await fetchAndConcat(links, state.config.jinaApiKey, 5, (e) => {
+        onProgress?.(e)
+      })
+      onProgress?.({ type: 'llms-expand:done', failed: failedCount })
       mdContent = expanded
       fetched.meta.isLlmsTxt = true
     } catch (e: any) {
