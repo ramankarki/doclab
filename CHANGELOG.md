@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.6.0](https://github.com/ramankarki/doclab/compare/doclab-v1.5.0...doclab-v1.6.0) (2026-06-15)
+
+
+### Features
+
+* **cli:** streaming progress for add/pull/rebuild with crash recovery ([717bfd2](https://github.com/ramankarki/doclab/commit/717bfd2a1089202f998b816eeec4914d65b0aa8a))
+
+
+### Bug Fixes
+
+* clean expansion message, remove duplicate daemon-start log ([7e7aa9b](https://github.com/ramankarki/doclab/commit/7e7aa9bda54ca9cd00cfeb02dae61e37fe468a63))
+* eliminate ReadableStream crash from async start + await ([aa3b3e4](https://github.com/ramankarki/doclab/commit/aa3b3e488d6a5839428185368793eceef74c92d6))
+* indent stderr fetch progress to match CLI output ([a0540a3](https://github.com/ramankarki/doclab/commit/a0540a3ae0a30bf8e42ca27a9e7cf6b1e0ffc5ff))
+* single-line fetch progress during llms.txt expansion ([8e7968d](https://github.com/ramankarki/doclab/commit/8e7968da128b0263890236dc1f880ca3643ce729))
+* stream sub-page fetch progress instead of stderr ([5ae3372](https://github.com/ramankarki/doclab/commit/5ae33724076df91de65c4efcb0bf343dc292c56a))
+* truncate subfetch progress lines, clear on completion ([f215d20](https://github.com/ramankarki/doclab/commit/f215d203f7eec360e04bd90a83c91657ba7575ad))
+
+
+### Performance
+
+* unify progress renderers, add embed progress, fix dead code ([489e2e6](https://github.com/ramankarki/doclab/commit/489e2e67998b1502be32b0524fcbe45fc20ff3f8))
+
+
+### Documentation
+
+* sync documentation with current codebase ([762dc1c](https://github.com/ramankarki/doclab/commit/762dc1c92dc9f4a0427be8182b10e6e983da05c2))
+
 ## [1.5.0](https://github.com/ramankarki/doclab/compare/doclab-v1.4.4...doclab-v1.5.0) (2026-06-15)
 
 
