@@ -76,7 +76,7 @@ Agent asks "how to use Bun with Drizzle ORM"
 ┌──────────┐     HTTP      ┌─────────────────────────────────────────┐
 │  Agent   │──────────────▶│  doclab daemon (one per machine)        │
 │ (Pi/Clau│               │                                         │
-│ de/Cline)│               │  Fetch → Readability → HTML→MD → Chunk │
+│ de/Cline)│               │  Fetch → turndown+GFM → Chunk → Embed │
 └──────────┘               │         ↓                               │
                            │  Embed (Ollama/OpenAI/Voyage) → SQLite  │
                            │         ↓                               │
@@ -87,6 +87,7 @@ Agent asks "how to use Bun with Drizzle ORM"
 - **Single global daemon** — one server, all projects, all agents
 - **Fetch pipeline** — direct fetch → turndown + GFM (HTML→MD) → recursive semantic chunker → embed
 - **Retry with backoff** — 3 attempts (1s, 2s) on transient fetch errors, Jina AI fallback after retries exhausted
+- **New to embeddings/vector search?** Read the [beginner's guide](docs/HOW_IT_WORKS.md).
 - **Semantic chunking** — splits on h2→h3→h4 headers, preserves code fences, targets ~2500 chars
 - **Hybrid search** — vector ANN + keyword token overlap + Reciprocal Rank Fusion
 - **SQLite + sqlite-vec** — zero infrastructure, WAL mode, concurrent reads
