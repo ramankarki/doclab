@@ -114,7 +114,8 @@ Agent asks "how to use Bun with Drizzle ORM"
 | **Any URL, not just llms.txt**     | Framework docs, blog posts, tutorials, migration guides — all same pipeline.                               |
 | **HTML → Markdown conversion**     | Preserves headings, code blocks, links. Non-markdown URLs handled automatically.                           |
 | **sqlite-vec**                     | Proven in codeview. WAL, transactions, concurrent reads. Zero infra.                                       |
-| **Custom markdown chunker**        | ~100 lines. Split on h2, preserve code fences. No max chunk size — semantic unit is atomic. No LlamaIndex. |
+| **turndown + GFM for HTML→MD**      | Battle-tested library (3KB). Handles tables, code fences, nested lists, all edge cases. Replaces custom regex converter. |
+| **Custom semantic chunker**         | Splits on h2→h3→h4 headers, preserves code fences, targets 2500 chars. Paragraph fallback with fence-safe merging. No LlamaIndex. |
 | **No generation in v1**            | Agents are LLMs. They synthesize answers from raw chunks better than small local models.                   |
 | **Ollama default, multi-provider** | Same embedding abstraction as codeview. Free local, or paid API.                                           |
 | **Scheduled rebuilds**             | Content doesn't change while you code. 24h default.                                                        |
@@ -536,7 +537,7 @@ Rules:
 - `<nav>`, `<footer>`, `<script>`, `<style>`, `<aside>` → removed
 - `<article>`, `<main>` → content extracted from these if present
 
-**No external converter library.** HTML → Markdown conversion for documentation is straightforward. Use a simple recursive walk (~150 lines). Edge cases (nested tables, SVG, iframes) are irrelevant for technical content.
+**turndown + GFM plugin.** HTML → Markdown conversion uses the battle-tested turndown library with GitHub Flavored Markdown plugin for table support. Custom rule preserves framework-specific `<Tab>` component labels. Navigation, footers, and scripts are stripped before conversion.
 
 ### 4.4 Config: `~/.doclab/dlconfig.json`
 
@@ -642,7 +643,7 @@ doclab remove <name>
 
 ### 5.1 Why Custom
 
-Markdown chunking is ~100 lines. LlamaIndex is 20+ deps. The tradeoff is obvious.
+Markdown chunking splits on h2→h3→h4 headers, targets 2500 chars, preserves code fences. Paragraph fallback uses fence-safe merging with accurate position tracking. No LlamaIndex needed.
 
 ### 5.2 Core Algorithm
 
@@ -1445,7 +1446,7 @@ doclab/
 │ ├── db.ts # SQLite setup, migrations, queries
 │ └── lib/
 │ ├── fetcher.ts # URL fetch + ETag/hash diff + format detection
-│ ├── html-to-md.ts # HTML → Markdown conversion (~150 lines)
+│ ├── html-to-md.ts # HTML → Markdown conversion (turndown + GFM, ~60 lines)
 │ ├── chunker.ts # Recursive markdown chunking (h2→h3→paragraph, fence-aware)
 │ ├── embedder.ts # Multi-provider embedding (ollama, openai, voyage)
 │ ├── search.ts # Hybrid search (vector + keyword + RRF)
@@ -1536,7 +1537,7 @@ No LlamaIndex. No HTML parser library. No markdown library. No vector DB. Pure B
 | ------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `config`      | 5       | dlconfig.json load, defaults, validation, edge cases                                                                                                                                                                          |
 | `fetcher`     | 6       | URL fetch, hash diff, ETag, error retry, HTML detection, redirect                                                                                                                                                             |
-| `html-to-md`  | 6       | h1-h6 conversion, code fence preservation, inline code, link conversion, nav/sidebar removal, table handling                                                                                                                  |
+| `html-to-md`  | 11      | turndown + GFM: headings, code blocks, inline code, links, lists, emphasis, tables, HTML entities, nav/footer removal, Tab component labels, empty anchor stripping                                                                                                                  |
 | `chunker`     | 12      | recursive h2→h3→paragraph splitting, target 2500 chars, code fence preservation, fence balance check, breadcrumb inheritance, min chunk (100), merge small fragments, no-headers fallback, dense docs, content hash stability |
 | `embedder`    | 5       | Provider create, batch embed, dimension detect, degraded fallback, API error handling                                                                                                                                         |
 | `ollama`      | 4       | Reachability, model detect, batch embed, error handling                                                                                                                                                                       |
@@ -1592,7 +1593,7 @@ Everything in this spec ships as v1.0. Single release.
 **Content Pipeline:**
 
 - [x] Fetch any URL, auto-detect format (markdown / HTML) via Content-Type header
-- [x] HTML → Markdown conversion (~150 lines) + Mozilla Readability for content extraction (strips nav/ads/boilerplate)
+- [x] HTML → Markdown conversion using turndown + GFM (replaces custom regex converter + Mozilla Readability)
 - [x] Jina AI fallback for Cloudflare-protected pages (Medium, etc.) — auto-proxy, API key optional
 - [x] Recursive chunking: h2 → h3 → paragraph breaks, target 2500 chars
 - [x] Code fence preservation — never split inside ```
@@ -1625,7 +1626,7 @@ Everything in this spec ships as v1.0. Single release.
 
 **Testing:**
 
-- [x] 54 tests across 9 test files (chunker, html-to-md, fetcher, search, config, server, embedder, ollama, agent-instructions)
+- [x] 73 tests across 8 test files (chunker, html-to-md, fetcher, search, config, server, embedder, ollama)
 
 ---
 
@@ -1633,7 +1634,7 @@ Everything in this spec ships as v1.0. Single release.
 
 | Concern           | LlamaIndex                              | doclab                                                       |
 | ----------------- | --------------------------------------- | ------------------------------------------------------------ |
-| Dependencies      | ~20+                                    | 3 (sqlite-vec, readability, linkedom)                        |
+| Dependencies      | ~20+                                    | 3 (sqlite-vec, turndown, turndown-plugin-gfm)                        |
 | Bundle size       | ~5MB+                                   | ~460KB (bundled daemon)                                      |
 | API surface       | Giant. Settings, decorators, callbacks. | 5 functions: `fetch`, `htmlToMd`, `chunk`, `embed`, `search` |
 | Debugging         | Framework internals                     | Your code. ~600 lines total.                                 |
@@ -1725,7 +1726,7 @@ Three tools partially overlap with doclab's problem space. None solve it fully.
 | **Embedding providers** | ❌ Cloud           | ✅ Ollama             | ❌ None        | ✅ Ollama + OpenAI + Voyage                 |
 | **Degraded mode**       | ❌                 | ❌                    | N/A            | ✅ Keyword fallback                         |
 | **Open source**         | ✅ (server closed) | ✅                    | ✅             | ✅                                          |
-| **Dependencies**        | Node + 20+         | Node + 20+            | Ruby/Rails     | Bun + 3 (sqlite-vec, readability, linkedom) |
+| **Dependencies**        | Node + 20+         | Node + 20+            | Ruby/Rails     | Bun + 3 (sqlite-vec, turndown, turndown-plugin-gfm) |
 
 ### Unique Combination
 

@@ -85,7 +85,7 @@ Agent asks "how to use Bun with Drizzle ORM"
 ```
 
 - **Single global daemon** — one server, all projects, all agents
-- **Fetch pipeline** — direct fetch → Mozilla Readability (content extraction) → custom HTML→MD converter → recursive chunker
+- **Fetch pipeline** — direct fetch → turndown + GFM (HTML→MD) → recursive semantic chunker → embed
 - **Retry with backoff** — 3 attempts (1s, 2s) on transient fetch errors, Jina AI fallback after retries exhausted
 - **Semantic chunking** — splits on h2→h3→h4 headers, preserves code fences, targets ~2500 chars
 - **Hybrid search** — vector ANN + keyword token overlap + Reciprocal Rank Fusion
@@ -165,7 +165,7 @@ doclab accepts any URL with technical content:
 | Migration guides | `react.dev/blog/...`                             | HTML     |
 | GitHub READMEs   | `github.com/user/repo#readme`                    | Markdown |
 
-HTML pages are automatically converted to clean markdown. First through Mozilla's Readability (content extraction — strips nav, ads, sidebars), then through a custom markdown converter that preserves code fences, headings, and links.
+HTML pages are automatically converted to clean markdown using turndown with GFM plugin (preserves code fences, headings, tables, and links). Navigation, footers, and sidebars are stripped before conversion. SPA pages are auto-detected and retried via Jina AI for JavaScript rendering.
 
 If a page is Cloudflare-protected (Medium, some docs sites), doclab automatically falls back to Jina AI's reader proxy which returns clean markdown directly.
 

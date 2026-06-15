@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [Unreleased]
+
+### Features
+
+* replace Mozilla Readability + custom regex HTML-to-MD with turndown + GFM
+* auto-detect SPA pages and retry with Jina AI for JavaScript rendering
+
+### Bug Fixes
+
+* fix code fence splitting in chunker paragraph fallback (position tracking drift)
+* fix empty headers inheriting parent heading names, clean trailing paths
+* strip empty anchor links (`[](#...)` noise from ReSpec self-links)
+* improve chunk merge granularity (greedy pack up to 90% target size)
+
 ## [1.4.4](https://github.com/ramankarki/doclab/compare/doclab-v1.4.3...doclab-v1.4.4) (2026-06-13)
 
 
