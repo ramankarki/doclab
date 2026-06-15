@@ -28,6 +28,36 @@ const BOT_DETECTION_PATTERNS = [
   /turnstile/i
 ]
 
+// SPA detection: pages where content is loaded via JavaScript.
+// The static HTML is an empty shell — no headings, no semantic content elements.
+const SPA_MIN_HEADINGS = 1
+
+function isSpaShell(html: string): boolean {
+  // Extract body, strip script/style before analysis
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
+  if (!bodyMatch) return false
+  let body = bodyMatch[1]
+  body = body.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+  body = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+  body = body.replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, '')
+
+  // Count headings
+  const h1 = (body.match(/<h1[\s>]/gi) || []).length
+  const h2 = (body.match(/<h2[\s>]/gi) || []).length
+  const h3 = (body.match(/<h3[\s>]/gi) || []).length
+  const headings = h1 + h2 + h3
+  if (headings >= SPA_MIN_HEADINGS) return false
+
+  // Count semantic content elements — SPAs have hardly any
+  const paragraphs = (body.match(/<p[\s>]/gi) || []).length
+  const listItems = (body.match(/<li[\s>]/gi) || []).length
+  const codeBlocks = (body.match(/<pre[\s>]/gi) || []).length
+  const tables = (body.match(/<table[\s>]/gi) || []).length
+  const semanticElements = paragraphs + listItems + codeBlocks + tables
+
+  return headings === 0 && semanticElements < 5
+}
+
 export async function fetchUrl(url: string, jinaApiKey?: string): Promise<FetchResult> {
   // npmjs.com package pages: use registry API (SPA — raw HTML is empty shell)
   const npmContent = await fetchNpmContent(url)
@@ -38,6 +68,18 @@ export async function fetchUrl(url: string, jinaApiKey?: string): Promise<FetchR
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const result = await directFetch(url)
+      // SPA detection: if HTML has no headings and very little text,
+      // content is likely loaded via JavaScript. Retry with Jina.
+      if (result.isHtml && isSpaShell(result.content)) {
+        try {
+          const jinaResult = await jinaFetch(url, jinaApiKey)
+          console.log('[doclab] SPA detected — used Jina AI to render JavaScript')
+          return jinaResult
+        } catch {
+          // Jina failed — return original HTML (better than nothing)
+          console.log('[doclab] SPA detected but Jina AI unavailable. Indexing static HTML only.')
+        }
+      }
       return result
     } catch (e: any) {
       lastError = e
