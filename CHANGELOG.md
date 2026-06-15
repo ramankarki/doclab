@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.5.0](https://github.com/ramankarki/doclab/compare/doclab-v1.4.4...doclab-v1.5.0) (2026-06-15)
+
+
+### Features
+
+* auto-detect SPA pages and retry with Jina AI ([e158ab2](https://github.com/ramankarki/doclab/commit/e158ab2328006891606d6e780fbeda87de2b31b0))
+* replace Readability + regex HTML-to-MD with turndown + GFM ([39fcbb6](https://github.com/ramankarki/doclab/commit/39fcbb666fd4ecf2267d779750734fafa5b647c7))
+* simplify chunker, add FTS5 search, improve embeddings ([8e83463](https://github.com/ramankarki/doclab/commit/8e834630f2a0dacbbc28deb0cac03f98306139b3))
+
+
+### Bug Fixes
+
+* code fence splitting in chunker paragraph fallback ([a9c3c0b](https://github.com/ramankarki/doclab/commit/a9c3c0b614e6a100bc2917aa327e8f1f9e2afa89))
+* empty headers inherit parent heading, clean trailing paths ([7f50c21](https://github.com/ramankarki/doclab/commit/7f50c21c1e389c00f49f923d075d9a485989ff39))
+* strip empty anchor links, improve chunk merge granularity ([259f31b](https://github.com/ramankarki/doclab/commit/259f31bfd01b567f079dd4bc713c38ff24431bf3))
+
+
+### Documentation
+
+* update AGENTS.md with HOW_IT_WORKS reference and correct test command ([efecaaf](https://github.com/ramankarki/doclab/commit/efecaaf9a26377d372864258e82dc5761f0dd00c))
+* update architecture and HOW_IT_WORKS for new pipeline ([17d72d5](https://github.com/ramankarki/doclab/commit/17d72d55634bf780b6edd726f0ab94a1fe6b7bc4))
+* update architecture docs, changelog, and create AGENTS.md ([550c5ce](https://github.com/ramankarki/doclab/commit/550c5ce6d9d9cba0d218bd879aeb996630472b1a))
+* use bun src/cli.ts directly (Bun runs TS natively) ([c600332](https://github.com/ramankarki/doclab/commit/c6003327ed349a3ee7f04e1a22a311738a44c90d))
+
 ## [Unreleased]
 
 ### Features
