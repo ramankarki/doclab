@@ -167,3 +167,5 @@ export type ProgressEvent =
   | { type: 'rebuild:drop' }
   | { type: 'rebuild:dropped' }
   | { type: 'rebuild:result' }
+  | { type: 'llms-expand:start'; count: number }
+  | { type: 'llms-expand:done' }

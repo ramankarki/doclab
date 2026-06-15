@@ -589,7 +589,6 @@ async function ensureDaemon(): Promise<number> {
   }
 
   // Auto-start
-  console.log('Starting doclab daemon...')
   await cmdStart()
 
   const newPort = readPort()
@@ -802,6 +801,9 @@ function renderAddProgress(e: ProgressEvent) {
     case 'fetch:done':
       console.log(` ${c.green}✓${c.reset} (${formatBytes(e.bytes)}, ${e.durationMs}ms)`)
       break
+    case 'llms-expand:start':
+      console.log(`  ${c.dim}Expanding ${e.count} sub-pages...${c.reset}`)
+      break
     case 'convert:start':
       process.stdout.write('  Converting...')
       break
@@ -847,6 +849,9 @@ function renderPullProgress(e: ProgressEvent) {
       break
     case 'fetch:done':
       console.log(` ${c.green}✓${c.reset} (${formatBytes(e.bytes)}, ${e.durationMs}ms)`)
+      break
+    case 'llms-expand:start':
+      console.log(`    ${c.dim}Expanding ${e.count} sub-pages...${c.reset}`)
       break
     case 'convert:start':
       process.stdout.write('    Converting...')
@@ -894,6 +899,9 @@ function renderRebuildProgress(e: ProgressEvent) {
       break
     case 'fetch:done':
       console.log(` ${c.green}✓${c.reset} (${formatBytes(e.bytes)}, ${e.durationMs}ms)`)
+      break
+    case 'llms-expand:start':
+      console.log(`    ${c.dim}Expanding ${e.count} sub-pages...${c.reset}`)
       break
     case 'convert:start':
       process.stdout.write('    Converting...')
