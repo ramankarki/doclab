@@ -805,16 +805,16 @@ function renderAddProgress(e: ProgressEvent) {
       console.log(`  ${c.dim}Expanding ${e.count} sub-pages...${c.reset}`)
       break
     case 'llms-expand:done':
-      process.stdout.write('\n')
+      process.stdout.write('\r\x1b[2K\n')
       if (e.failed > 0) {
         console.log(`  ${c.warn}⚠ ${e.failed} sub-page(s) could not be fetched${c.reset}`)
       }
       break
-    case 'subfetch:progress':
-      process.stdout.write(
-        `\r  [${e.index}/${e.total}] Fetching ${e.file}...`.padEnd(60)
-      )
-      break
+    case 'subfetch:progress': {
+        const msg = `  [${e.index}/${e.total}] Fetching ${e.file}...`
+        process.stdout.write(`\r${msg.slice(0, 60).padEnd(60)}`)
+        break
+      }
     case 'convert:start':
       process.stdout.write('  Converting...')
       break
@@ -865,16 +865,16 @@ function renderPullProgress(e: ProgressEvent) {
       console.log(`    ${c.dim}Expanding ${e.count} sub-pages...${c.reset}`)
       break
     case 'llms-expand:done':
-      process.stdout.write('\n')
+      process.stdout.write('\r\x1b[2K\n')
       if (e.failed > 0) {
         console.log(`    ${c.warn}⚠ ${e.failed} sub-page(s) could not be fetched${c.reset}`)
       }
       break
-    case 'subfetch:progress':
-      process.stdout.write(
-        `\r    [${e.index}/${e.total}] Fetching ${e.file}...`.padEnd(64)
-      )
-      break
+    case 'subfetch:progress': {
+        const msg = `    [${e.index}/${e.total}] Fetching ${e.file}...`
+        process.stdout.write(`\r${msg.slice(0, 64).padEnd(64)}`)
+        break
+      }
     case 'convert:start':
       process.stdout.write('    Converting...')
       break
@@ -926,16 +926,16 @@ function renderRebuildProgress(e: ProgressEvent) {
       console.log(`    ${c.dim}Expanding ${e.count} sub-pages...${c.reset}`)
       break
     case 'llms-expand:done':
-      process.stdout.write('\n')
+      process.stdout.write('\r\x1b[2K\n')
       if (e.failed > 0) {
         console.log(`    ${c.warn}⚠ ${e.failed} sub-page(s) could not be fetched${c.reset}`)
       }
       break
-    case 'subfetch:progress':
-      process.stdout.write(
-        `\r    [${e.index}/${e.total}] Fetching ${e.file}...`.padEnd(64)
-      )
-      break
+    case 'subfetch:progress': {
+        const msg = `    [${e.index}/${e.total}] Fetching ${e.file}...`
+        process.stdout.write(`\r${msg.slice(0, 64).padEnd(64)}`)
+        break
+      }
     case 'convert:start':
       process.stdout.write('    Converting...')
       break
