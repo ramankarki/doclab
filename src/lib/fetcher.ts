@@ -320,7 +320,7 @@ export async function fetchAndConcat(
       batch.map(async (u, bi) => {
         const idx = i + bi
         const fileName = u.split('/').pop() || u
-        const msg = `[${idx + 1}/${total}] Fetching ${fileName}...`
+        const msg = `  [${idx + 1}/${total}] Fetching ${fileName}...`
         process.stderr.write(`\r${msg}\x1b[K`)
         const result = await fetchUrl(u, jinaApiKey)
         // Convert HTML sub-pages to markdown before concatenating
