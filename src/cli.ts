@@ -20,7 +20,7 @@ import { existsSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileS
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { getDoclabDir, loadConfig, isValidUrl } from './config'
-import type { SearchResponse, HealthResponse, SourceMeta, ErrorResponse } from './types'
+import type { SearchResponse, HealthResponse, SourceMeta, ErrorResponse, ProgressEvent } from './types'
 import { generateAgentInstructions } from './lib/agent-instructions'
 import { c } from './lib/colors'
 
@@ -223,23 +223,36 @@ async function cmdAdd(args: string[]) {
 
   const port = await ensureDaemon()
 
-  console.log('Fetching...')
   try {
-    const result = await apiPost<SourceMeta>(port, '/add', { url, name })
-    if (result) {
-      console.log(
-        `${c.green}Added "${result.name}" — ${result.chunkCount} chunks indexed${c.reset}`
-      )
-
-      // Suggest llms-full.txt / llms.txt at domain
-      await suggestFullDocs(url, port)
-    } else {
-      console.error(`${c.red}Failed to add source${c.reset}`)
+    const result = await apiPostStream<{ name: string; chunkCount: number }>(
+      port,
+      '/add',
+      { url, name },
+      (e) => renderAddProgress(e)
+    )
+    console.log(
+      `\n${c.green}Added "${result.name}" — ${result.chunkCount} chunks indexed${c.reset}`
+    )
+    // Suggest llms-full.txt / llms.txt at domain
+    await suggestFullDocs(url, port)
+  } catch (streamErr: any) {
+    // Bun streaming bug (#32120) — daemon may have crashed, retry non-streaming
+    const fallbackPort = await ensureDaemonAlive()
+    console.log(`  ${c.dim}Retrying without streaming...${c.reset}`)
+    try {
+      const result = await apiPost<SourceMeta>(fallbackPort, '/add', { url, name })
+      if (result) {
+        console.log(
+          `\n${c.green}Added "${result.name}" — ${result.chunkCount} chunks indexed${c.reset}`
+        )
+        await suggestFullDocs(url, fallbackPort)
+      } else {
+        throw new Error('Failed to add source')
+      }
+    } catch (e: any) {
+      console.error(`\n${c.error}${e.message}${c.reset}`)
       process.exit(1)
     }
-  } catch (e: any) {
-    console.error(e.message)
-    process.exit(1)
   }
 }
 
@@ -322,21 +335,38 @@ async function cmdPull(args: string[]) {
   const name = args[0]
   const port = await ensureDaemon()
 
-  console.log('Pulling...')
   try {
-    const result = await apiPost<{ updated: string[] }>(port, '/pull', {
-      name
-    })
-    if (result && result.updated.length > 0) {
+    const result = await apiPostStream<{ updated: string[] }>(
+      port,
+      '/pull',
+      { name },
+      (e) => renderPullProgress(e)
+    )
+    if (result.updated.length > 0) {
       console.log(
-        `${c.green}Updated ${result.updated.length} source(s): ${result.updated.join(', ')}${c.reset}`
+        `\n${c.green}Updated ${result.updated.length} source(s): ${result.updated.join(', ')}${c.reset}`
       )
     } else {
-      console.log(`${c.green}All sources up to date${c.reset}`)
+      console.log(`\n${c.green}All sources up to date${c.reset}`)
     }
-  } catch (e: any) {
-    console.error(e.message)
-    process.exit(1)
+  } catch (streamErr: any) {
+    // Bun streaming bug (#32120) — retry non-streaming
+    const fallbackPort = await ensureDaemonAlive()
+    console.log(`  ${c.dim}Retrying without streaming...${c.reset}`)
+    try {
+      console.log('Pulling...')
+      const result = await apiPost<{ updated: string[] }>(fallbackPort, '/pull', { name })
+      if (result && result.updated.length > 0) {
+        console.log(
+          `${c.green}Updated ${result.updated.length} source(s): ${result.updated.join(', ')}${c.reset}`
+        )
+      } else {
+        console.log(`${c.green}All sources up to date${c.reset}`)
+      }
+    } catch (e: any) {
+      console.error(`${c.error}${e.message}${c.reset}`)
+      process.exit(1)
+    }
   }
 }
 
@@ -420,13 +450,26 @@ async function cmdSearch(args: string[]) {
 async function cmdRebuild() {
   const port = await ensureDaemon()
 
-  console.log('Rebuilding...')
   try {
-    await apiPost(port, '/rebuild', {})
-    console.log(`${c.green}Rebuild complete${c.reset}`)
-  } catch (e: any) {
-    console.error(e.message)
-    process.exit(1)
+    await apiPostStream<{ ok: boolean }>(
+      port,
+      '/rebuild',
+      {},
+      (e) => renderRebuildProgress(e)
+    )
+    console.log(`\n${c.green}Rebuild complete${c.reset}`)
+  } catch (streamErr: any) {
+    // Bun streaming bug (#32120) — retry non-streaming
+    const fallbackPort = await ensureDaemonAlive()
+    console.log(`  ${c.dim}Retrying without streaming...${c.reset}`)
+    try {
+      console.log('Rebuilding...')
+      await apiPost(fallbackPort, '/rebuild', {})
+      console.log(`${c.green}Rebuild complete${c.reset}`)
+    } catch (e: any) {
+      console.error(`${c.error}${e.message}${c.reset}`)
+      process.exit(1)
+    }
   }
 }
 
@@ -644,6 +687,232 @@ async function apiPost<T>(port: number, path: string, body: unknown): Promise<T 
       throw e
     }
     throw new Error(`Daemon unreachable on port ${port}`)
+  }
+}
+
+// ─── Streaming HTTP ───
+
+async function apiPostStream<T>(
+  port: number,
+  path: string,
+  body: unknown,
+  onProgress: (event: ProgressEvent) => void
+): Promise<T> {
+  const response = await fetch(`http://127.0.0.1:${port}${path}?stream=1`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(300000)
+  })
+
+  if (!response.ok) {
+    const errBody = (await response.json()) as ErrorResponse
+    throw new Error(errBody.error ?? `HTTP ${response.status}`)
+  }
+
+  if (!response.body) {
+    throw new Error('No response body')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let result: T | null = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      if (!line.trim()) continue
+      let event: ProgressEvent
+      try {
+        event = JSON.parse(line)
+      } catch {
+        continue
+      }
+
+      if (event.type === 'error') {
+        throw new Error(event.message)
+      }
+
+      if (
+        event.type === 'result' ||
+        event.type === 'pull:result' ||
+        event.type === 'rebuild:result'
+      ) {
+        result = event as unknown as T
+      } else {
+        onProgress(event)
+      }
+    }
+  }
+
+  // Process final buffer
+  if (buffer.trim()) {
+    let event: ProgressEvent
+    try {
+      event = JSON.parse(buffer)
+    } catch {
+      throw new Error('Stream ended with malformed data')
+    }
+    if (event.type === 'error') {
+      throw new Error(event.message)
+    }
+    if (
+      event.type === 'result' ||
+      event.type === 'pull:result' ||
+      event.type === 'rebuild:result'
+    ) {
+      result = event as unknown as T
+    }
+  }
+
+  if (!result) {
+    throw new Error('Stream ended without result')
+  }
+
+  return result
+}
+
+// ─── Daemon liveness ───
+
+async function ensureDaemonAlive(): Promise<number> {
+  const port = readPort()
+  if (port && (await isDaemonRunning(port))) return port
+  console.log(`\n  ${c.warn}Daemon lost — Bun streaming bug #32120. Restarting...${c.reset}`)
+  cleanupStaleFiles()
+  await cmdStart()
+  const newPort = readPort()
+  if (!newPort) throw new Error('Failed to restart daemon')
+  return newPort
+}
+
+// ─── Progress renderers ───
+
+function renderAddProgress(e: ProgressEvent) {
+  switch (e.type) {
+    case 'fetch:start':
+      process.stdout.write(`  Fetching ${e.name}...`)
+      break
+    case 'fetch:done':
+      console.log(` ${c.green}✓${c.reset} (${formatBytes(e.bytes)}, ${e.durationMs}ms)`)
+      break
+    case 'convert:start':
+      process.stdout.write('  Converting...')
+      break
+    case 'convert:done':
+      console.log(` ${c.green}✓${c.reset}`)
+      break
+    case 'chunk:start':
+      process.stdout.write('  Chunking...')
+      break
+    case 'chunk:done':
+      console.log(` ${c.green}✓${c.reset} (${e.count} chunks)`)
+      break
+    case 'embed:start':
+      process.stdout.write(`  Embedding ${e.total} chunks...`)
+      break
+    case 'embed:done':
+      console.log(` ${c.green}✓${c.reset} (${e.durationMs}ms)`)
+      break
+  }
+}
+
+function renderPullProgress(e: ProgressEvent) {
+  switch (e.type) {
+    case 'pull:start':
+      if (e.total > 0) {
+        console.log(`Pulling ${e.total} source(s)...\n`)
+      }
+      break
+    case 'source:skip':
+      console.log(`  ${c.bold}${e.name}${c.reset}  ${c.dim}up to date${c.reset}`)
+      break
+    case 'source:start':
+      console.log(`  ${c.bold}${e.name}${c.reset}`)
+      break
+    case 'source:done':
+      console.log(`  ${c.green}✓${c.reset} ${c.dim}(${e.chunkCount} chunks)${c.reset}\n`)
+      break
+    case 'source:error':
+      console.log(`  ${c.error}✗${c.reset} ${e.message}\n`)
+      break
+    case 'fetch:start':
+      process.stdout.write('    Fetching...')
+      break
+    case 'fetch:done':
+      console.log(` ${c.green}✓${c.reset} (${formatBytes(e.bytes)}, ${e.durationMs}ms)`)
+      break
+    case 'convert:start':
+      process.stdout.write('    Converting...')
+      break
+    case 'convert:done':
+      console.log(` ${c.green}✓${c.reset}`)
+      break
+    case 'chunk:start':
+      process.stdout.write('    Chunking...')
+      break
+    case 'chunk:done':
+      console.log(` ${c.green}✓${c.reset} (${e.count} chunks)`)
+      break
+    case 'embed:start':
+      process.stdout.write(`    Embedding ${e.total} chunks...`)
+      break
+    case 'embed:done':
+      console.log(` ${c.green}✓${c.reset} (${e.durationMs}ms)`)
+      break
+  }
+}
+
+function renderRebuildProgress(e: ProgressEvent) {
+  switch (e.type) {
+    case 'rebuild:drop':
+      process.stdout.write('  Dropping all chunks...')
+      break
+    case 'rebuild:dropped':
+      console.log(` ${c.green}✓${c.reset}`)
+      break
+    case 'rebuild:start':
+      console.log(`  Re-indexing ${e.total} source(s)...\n`)
+      break
+    case 'source:start':
+      console.log(`  ${c.bold}[${e.index}/${e.total}] ${e.name}${c.reset}`)
+      break
+    case 'source:done':
+      console.log(`  ${c.green}✓${c.reset} ${c.dim}(${e.chunkCount} chunks)${c.reset}\n`)
+      break
+    case 'source:error':
+      console.log(`  ${c.error}✗${c.reset} ${e.message}\n`)
+      break
+    case 'fetch:start':
+      process.stdout.write('    Fetching...')
+      break
+    case 'fetch:done':
+      console.log(` ${c.green}✓${c.reset} (${formatBytes(e.bytes)}, ${e.durationMs}ms)`)
+      break
+    case 'convert:start':
+      process.stdout.write('    Converting...')
+      break
+    case 'convert:done':
+      console.log(` ${c.green}✓${c.reset}`)
+      break
+    case 'chunk:start':
+      process.stdout.write('    Chunking...')
+      break
+    case 'chunk:done':
+      console.log(` ${c.green}✓${c.reset} (${e.count} chunks)`)
+      break
+    case 'embed:start':
+      process.stdout.write(`    Embedding ${e.total} chunks...`)
+      break
+    case 'embed:done':
+      console.log(` ${c.green}✓${c.reset} (${e.durationMs}ms)`)
+      break
   }
 }
 

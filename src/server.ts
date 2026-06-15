@@ -18,7 +18,8 @@ import type {
   SearchResponse,
   HealthResponse,
   ErrorResponse,
-  SourceMeta
+  SourceMeta,
+  ProgressEvent
 } from './types'
 import { Embedder } from './lib/embedder'
 import { hybridSearch } from './lib/search'
@@ -59,6 +60,7 @@ export function createServer(state: ServerState, onRequest?: () => void) {
   const server = Bun.serve({
     port: state.config.port ?? 0,
     hostname: '127.0.0.1',
+    idleTimeout: 255, // max allowed — long enough for streaming embed operations
     async fetch(req): Promise<Response> {
       // Notify daemon of activity (resets idle timer)
       if (onRequest) onRequest()
@@ -81,7 +83,9 @@ export function createServer(state: ServerState, onRequest?: () => void) {
         }
 
         if (path === '/add' && method === 'POST') {
-          return handleAdd(req, state)
+          return url.searchParams.has('stream')
+            ? handleAddStream(req, state)
+            : handleAdd(req, state)
         }
 
         if (path === '/remove' && method === 'POST') {
@@ -89,11 +93,15 @@ export function createServer(state: ServerState, onRequest?: () => void) {
         }
 
         if (path === '/pull' && method === 'POST') {
-          return handlePull(req, state)
+          return url.searchParams.has('stream')
+            ? handlePullStream(req, state)
+            : handlePull(req, state)
         }
 
         if (path === '/rebuild' && method === 'POST') {
-          return handleRebuild(state)
+          return url.searchParams.has('stream')
+            ? handleRebuildStream(state)
+            : handleRebuild(state)
         }
 
         return json({ error: 'Not found', code: 'NOT_FOUND' }, 404)
@@ -323,34 +331,212 @@ async function handleRebuild(state: ServerState): Promise<Response> {
   }
 }
 
+// ─── Streaming handlers ───
+
+function streamResponse(stream: ReadableStream): Response {
+  return new Response(stream, {
+    headers: { 'Content-Type': 'application/x-ndjson' }
+  })
+}
+
+function makeEmitter(controller: ReadableStreamDefaultController) {
+  const encoder = new TextEncoder()
+  return (e: ProgressEvent) => {
+    try {
+      controller.enqueue(encoder.encode(JSON.stringify(e) + '\n'))
+    } catch {
+      // Client disconnected — ignore
+    }
+  }
+}
+
+async function handleAddStream(req: Request, state: ServerState): Promise<Response> {
+  if (state.isWriting) {
+    return json({ error: 'Another operation in progress', code: 'WRITE_IN_PROGRESS' }, 409)
+  }
+
+  let body: { url: string; name?: string }
+  try {
+    body = await req.json()
+  } catch {
+    return json({ error: 'Invalid JSON body', code: 'BAD_REQUEST' }, 400)
+  }
+
+  if (!body.url) {
+    return json({ error: "Missing 'url' field", code: 'BAD_REQUEST' }, 400)
+  }
+
+  state.isWriting = true
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const keepalive = streamKeepalive(controller)
+      const emit = makeEmitter(controller)
+
+      try {
+        const result = await addSource(body.url, body.name, state, emit)
+        emit({ type: 'result', name: result.name, chunkCount: result.chunkCount })
+      } catch (e: any) {
+        if (e instanceof FetchError) {
+          emit({ type: 'error', message: e.message, code: e.code })
+        } else {
+          emit({ type: 'error', message: e.message })
+        }
+      } finally {
+        clearInterval(keepalive)
+        state.isWriting = false
+        try { controller.close() } catch {}
+      }
+    }
+  })
+
+  return streamResponse(stream)
+}
+
+async function handlePullStream(req: Request, state: ServerState): Promise<Response> {
+  if (state.isWriting) {
+    return json({ error: 'Another operation in progress', code: 'WRITE_IN_PROGRESS' }, 409)
+  }
+
+  let body: { name?: string }
+  try {
+    body = await req.json()
+  } catch {
+    body = {}
+  }
+
+  state.isWriting = true
+
+  const { config } = loadConfig()
+  const sources = body.name
+    ? config.sources.filter((s) => s.name === body.name)
+    : config.sources
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const keepalive = streamKeepalive(controller)
+      const emit = makeEmitter(controller)
+
+      try {
+        emit({ type: 'pull:start', total: sources.length })
+        const updated = await pullSources(body.name, state, emit)
+        emit({ type: 'pull:result', updated })
+      } catch (e: any) {
+        emit({ type: 'error', message: e.message })
+      } finally {
+        clearInterval(keepalive)
+        state.isWriting = false
+        try { controller.close() } catch {}
+      }
+    }
+  })
+
+  return streamResponse(stream)
+}
+
+async function handleRebuildStream(state: ServerState): Promise<Response> {
+  if (state.isWriting) {
+    return json({ error: 'Another operation in progress', code: 'WRITE_IN_PROGRESS' }, 409)
+  }
+
+  state.isWriting = true
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const keepalive = streamKeepalive(controller)
+      const emit = makeEmitter(controller)
+
+      try {
+        const db = getDb()
+        const dims = getDimensions()
+
+        emit({ type: 'rebuild:drop' })
+        dropAllChunks(db, dims ?? undefined)
+        emit({ type: 'rebuild:dropped' })
+
+        // Reload config
+        const { config: freshConfig } = loadConfig()
+        state.config = freshConfig
+
+        const sources = freshConfig.sources
+        emit({ type: 'rebuild:start', total: sources.length })
+
+        let idx = 0
+        for (const src of sources) {
+          idx++
+          emit({ type: 'source:start', index: idx, total: sources.length, name: src.name })
+          try {
+            const meta = await addSource(src.url, src.name, state, emit)
+            emit({ type: 'source:done', index: idx, total: sources.length, name: src.name, chunkCount: meta.chunkCount })
+          } catch (e: any) {
+            console.error(`${c.error}[doclab]${c.reset} Rebuild failed for ${src.name}:`, e.message)
+            emit({ type: 'source:error', index: idx, total: sources.length, name: src.name, message: e.message })
+          }
+        }
+
+        emit({ type: 'rebuild:result' })
+      } catch (e: any) {
+        emit({ type: 'error', message: e.message })
+      } finally {
+        clearInterval(keepalive)
+        state.isWriting = false
+        try { controller.close() } catch {}
+      }
+    }
+  })
+
+  return streamResponse(stream)
+}
+
+// ─── Stream helpers ───
+
+function streamKeepalive(controller: ReadableStreamDefaultController): Timer {
+  const encoder = new TextEncoder()
+  // NDJSON comment lines are ignored by parsers, keep connection alive
+  return setInterval(() => {
+    try { controller.enqueue(encoder.encode(':keepalive\n')) } catch {}
+  }, 15000)
+}
+
 // ─── Core operations ───
+
+type ProgressFn = (event: ProgressEvent) => void
 
 async function addSource(
   url: string,
   nameOverride: string | undefined,
-  state: ServerState
+  state: ServerState,
+  onProgress?: ProgressFn
 ): Promise<SourceMeta> {
   const db = getDb()
 
-  // Fetch
-  const fetched = await fetchUrl(url, state.config.jinaApiKey)
+  // Generate name early
+  const name = nameOverride ?? generatedName(url, '')
 
-  // Generate name (before expansion so error messages can use it)
-  const name = nameOverride ?? generatedName(url, fetched.meta.title ?? '')
+  // Fetch
+  onProgress?.({ type: 'fetch:start', name })
+  const fetchStart = Date.now()
+  const fetched = await fetchUrl(url, state.config.jinaApiKey)
+  const fetchMs = Date.now() - fetchStart
+  onProgress?.({ type: 'fetch:done', bytes: Buffer.byteLength(fetched.content), durationMs: fetchMs })
+
+  // Final name (may use fetched title)
+  const finalName = nameOverride ?? generatedName(url, fetched.meta.title ?? '')
 
   // Convert HTML to markdown if needed
   let mdContent = fetched.content
   if (fetched.isHtml && !fetched.isMarkdown) {
+    onProgress?.({ type: 'convert:start' })
     mdContent = htmlToMarkdown(fetched.content)
+    onProgress?.({ type: 'convert:done' })
   }
 
   // Expand llms.txt TOC: extract sub-page links, fetch & concatenate
   if (isLlmsTxtUrl(url)) {
     const links = extractRelativeLinks(fetched.content, url)
     if (links.length === 0) {
-      // llms.txt with no extractable links — useless TOC, abort
       throw new FetchError(
-        `No documentation links found in llms.txt for ${name}. Nothing to index.`,
+        `No documentation links found in llms.txt for ${finalName}. Nothing to index.`,
         'LLMS_TXT_NO_LINKS',
         0
       )
@@ -363,9 +549,8 @@ async function addSource(
       mdContent = expanded
       fetched.meta.isLlmsTxt = true
     } catch (e: any) {
-      // All-or-nothing: abort the entire add
       throw new FetchError(
-        `Failed to index ${name}: ${e.message}`,
+        `Failed to index ${finalName}: ${e.message}`,
         'LLMS_TXT_EXPAND_FAILED',
         0
       )
@@ -373,14 +558,16 @@ async function addSource(
   }
 
   // Chunk
-  const chunks = chunkMarkdown(mdContent, name)
+  onProgress?.({ type: 'chunk:start' })
+  const chunks = chunkMarkdown(mdContent, finalName)
+  onProgress?.({ type: 'chunk:done', count: chunks.length })
 
   // Build metadata
   const now = new Date().toISOString()
   const meta: SourceMeta = {
-    name,
+    name: finalName,
     url,
-    title: fetched.meta.title ?? name,
+    title: fetched.meta.title ?? finalName,
     fetchedAt: now,
     contentHash: fetched.hash,
     chunkCount: chunks.length,
@@ -393,23 +580,23 @@ async function addSource(
   }
 
   // Delete existing chunks for this source
-  deleteChunksForSource(db, name)
+  deleteChunksForSource(db, finalName)
 
   // Insert source
   upsertSource(db, meta)
 
   // Add to config
-  addSourceToConfig({ name, url })
+  addSourceToConfig({ name: finalName, url })
   const { config } = loadConfig()
   state.config = config
 
   // Insert chunks first (before embedding — they persist even if embed fails)
   if (chunks.length > 0) {
     for (const c of chunks) {
-      const hash = chunkHash(name, c.sectionPath)
+      const hash = chunkHash(finalName, c.sectionPath)
       insertChunk(db, {
         hash,
-        source: name,
+        source: finalName,
         sectionPath: c.sectionPath,
         header: c.header,
         content: c.content,
@@ -421,6 +608,9 @@ async function addSource(
   // Embed chunks (best-effort)
   if (state.embedder && chunks.length > 0) {
     try {
+      onProgress?.({ type: 'embed:start', total: chunks.length })
+      const embedStart = Date.now()
+
       const dims = await state.embedder.getDimensions()
       ensureVecTable(db, dims)
       state.embeddingDims = dims
@@ -430,7 +620,7 @@ async function addSource(
 
       for (let i = 0; i < chunks.length; i++) {
         if (embeddings[i]) {
-          const hash = chunkHash(name, chunks[i].sectionPath)
+          const hash = chunkHash(finalName, chunks[i].sectionPath)
           const row = db
             .prepare('SELECT id FROM chunks WHERE hash = ?')
             .get(hash) as { id: number } | undefined
@@ -439,9 +629,11 @@ async function addSource(
           }
         }
       }
+
+      onProgress?.({ type: 'embed:done', durationMs: Date.now() - embedStart })
     } catch (e: any) {
       console.error(
-        `[doclab] Embedding failed for ${name}: ${e.message}. Chunks searchable via keyword only.`
+        `[doclab] Embedding failed for ${finalName}: ${e.message}. Chunks searchable via keyword only.`
       )
     }
   }
@@ -449,15 +641,21 @@ async function addSource(
   return meta
 }
 
-async function pullSources(nameFilter: string | undefined, state: ServerState): Promise<string[]> {
+async function pullSources(
+  nameFilter: string | undefined,
+  state: ServerState,
+  onProgress?: ProgressFn
+): Promise<string[]> {
   const { config } = loadConfig()
   state.config = config
 
   const sources = nameFilter ? config.sources.filter((s) => s.name === nameFilter) : config.sources
 
   const updated: string[] = []
+  let index = 0
 
   for (const src of sources) {
+    index++
     try {
       const db = getDb()
       const existing = db
@@ -472,21 +670,27 @@ async function pullSources(nameFilter: string | undefined, state: ServerState): 
           new Date().toISOString(),
           src.name
         )
+        onProgress?.({ type: 'source:skip', index, total: sources.length, name: src.name })
         continue
       }
 
       // Changed — re-index
-      await addSource(src.url, src.name, state)
-      updated.push(src.name)
+      onProgress?.({ type: 'source:start', index, total: sources.length, name: src.name })
+      try {
+        const meta = await addSource(src.url, src.name, state, onProgress)
+        updated.push(src.name)
+        onProgress?.({ type: 'source:done', index, total: sources.length, name: src.name, chunkCount: meta.chunkCount })
+      } catch (e: any) {
+        onProgress?.({ type: 'source:error', index, total: sources.length, name: src.name, message: e.message })
+      }
     } catch (e: any) {
       if (e instanceof FetchError && e.status === 404) {
-        // Dead URL — remove
         console.log(`${c.warn}[doclab]${c.reset} ${src.name}: URL returned 404. Source removed.`)
         const db = getDb()
         deleteSource(db, src.name)
         removeSourceFromConfig(src.name)
+        onProgress?.({ type: 'source:error', index, total: sources.length, name: src.name, message: 'URL returned 404 — source removed' })
       } else {
-        // Connection error — increment failures
         const db = getDb()
         const row = db
           .prepare('SELECT consecutive_failures FROM sources WHERE name = ?')
@@ -508,6 +712,7 @@ async function pullSources(nameFilter: string | undefined, state: ServerState): 
             `${c.warn}[doclab]${c.reset} ${src.name}: fetch failed (${failures}/3). Retrying next cycle.`
           )
         }
+        onProgress?.({ type: 'source:error', index, total: sources.length, name: src.name, message: e.message })
       }
     }
   }

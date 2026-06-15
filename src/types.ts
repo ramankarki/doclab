@@ -143,3 +143,27 @@ export interface RawChunk {
   content: string
   hasCodeBlocks: boolean
 }
+
+// ─── Streaming progress events ───
+
+export type ProgressEvent =
+  | { type: 'fetch:start'; name: string }
+  | { type: 'fetch:done'; bytes: number; durationMs: number }
+  | { type: 'convert:start' }
+  | { type: 'convert:done' }
+  | { type: 'chunk:start' }
+  | { type: 'chunk:done'; count: number }
+  | { type: 'embed:start'; total: number }
+  | { type: 'embed:done'; durationMs: number }
+  | { type: 'result'; name: string; chunkCount: number }
+  | { type: 'error'; message: string; code?: string }
+  | { type: 'source:start'; index: number; total: number; name: string }
+  | { type: 'source:skip'; index: number; total: number; name: string }
+  | { type: 'source:done'; index: number; total: number; name: string; chunkCount: number }
+  | { type: 'source:error'; index: number; total: number; name: string; message: string }
+  | { type: 'pull:start'; total: number }
+  | { type: 'pull:result'; updated: string[] }
+  | { type: 'rebuild:start'; total: number }
+  | { type: 'rebuild:drop' }
+  | { type: 'rebuild:dropped' }
+  | { type: 'rebuild:result' }
