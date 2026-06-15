@@ -259,36 +259,49 @@ interface ChunkFragment {
   content: string
 }
 
-function splitOnParagraphs(text: string, fenceSpans: FenceSpan[]): ChunkFragment[] {
+function splitOnParagraphs(text: string, _outerFenceSpans: FenceSpan[]): ChunkFragment[] {
   // Split on double newlines (paragraph breaks)
   const rawParts = text.split(/\n\n+/)
 
-  // Merge parts that are inside the same code fence
-  const parts: string[] = []
+  // Compute fence spans on this exact text so positions are always correct.
+  // Outer callers may pass spans from a different (trimmed/substring) context.
+  const fenceSpans = findFenceSpans(text)
+
+  // Find absolute positions of each part in the original text.
+  // Using indexOf ensures positions are correct regardless of how many
+  // newlines were collapsed by the split regex.
+  const positioned: { content: string; endPos: number }[] = []
+  let searchFrom = 0
+  for (const part of rawParts) {
+    const idx = text.indexOf(part, searchFrom)
+    if (idx >= 0) {
+      positioned.push({ content: part, endPos: idx + part.length })
+      searchFrom = idx + part.length
+    }
+  }
+
+  // Merge adjacent parts if the split point between them falls inside a code fence.
+  // The split point is the end position of the previous part in the original text.
+  const merged: string[] = []
   let current = ''
 
-  for (const part of rawParts) {
+  for (let i = 0; i < positioned.length; i++) {
     if (current === '') {
-      current = part
+      current = positioned[i].content
     } else {
-      const testText = current + '\n\n' + part
-      // Check if the join point is inside a fence
-      const joinPoint = current.length
-      // Only merge if both are inside fences or both outside
-      const currentInFence = isInsideFence(current.length - 1, fenceSpans)
-      const partInFence = isInsideFence(0, findFenceSpans(part))
-
-      if (currentInFence === partInFence) {
-        current += '\n\n' + part
+      // The gap between the previous part's end and this part's start
+      // is the original newline separator. Check if it's inside a fence.
+      if (isInsideFence(positioned[i - 1].endPos, fenceSpans)) {
+        current += '\n\n' + positioned[i].content
       } else {
-        parts.push(current)
-        current = part
+        merged.push(current)
+        current = positioned[i].content
       }
     }
   }
-  if (current) parts.push(current)
+  if (current) merged.push(current)
 
-  return parts.filter((p) => p.trim().length >= MIN_CHUNK_SIZE).map((p) => ({ content: p.trim() }))
+  return merged.filter((p) => p.trim().length >= MIN_CHUNK_SIZE).map((p) => ({ content: p.trim() }))
 }
 
 function mergeSmallChunks(chunks: ChunkFragment[]): ChunkFragment[] {
