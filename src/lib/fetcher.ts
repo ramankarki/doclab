@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { SourceMeta, SourceKind } from '../types'
 import { htmlToMarkdown } from './html-to-md'
-import { extractContent } from './readability-extract'
 
 export interface FetchResult {
   content: string
@@ -283,8 +282,7 @@ export async function fetchAndConcat(
         const result = await fetchUrl(u, jinaApiKey)
         // Convert HTML sub-pages to markdown before concatenating
         if (result.isHtml && !result.isMarkdown) {
-          const cleanedHtml = extractContent(result.content)
-          results[idx] = htmlToMarkdown(cleanedHtml)
+          results[idx] = htmlToMarkdown(result.content)
         } else {
           results[idx] = result.content
         }

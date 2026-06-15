@@ -24,7 +24,6 @@ import { Embedder } from './lib/embedder'
 import { hybridSearch } from './lib/search'
 import { fetchUrl, FetchError, isLlmsTxtUrl, extractRelativeLinks, fetchAndConcat } from './lib/fetcher'
 import { htmlToMarkdown } from './lib/html-to-md'
-import { extractContent } from './lib/readability-extract'
 import { chunkMarkdown } from './lib/chunker'
 import { chunkHash } from './lib/fetcher'
 import {
@@ -342,9 +341,7 @@ async function addSource(
   // Convert HTML to markdown if needed
   let mdContent = fetched.content
   if (fetched.isHtml && !fetched.isMarkdown) {
-    // Extract main content first (strips nav/ads/boilerplate)
-    const cleanedHtml = extractContent(fetched.content)
-    mdContent = htmlToMarkdown(cleanedHtml)
+    mdContent = htmlToMarkdown(fetched.content)
   }
 
   // Expand llms.txt TOC: extract sub-page links, fetch & concatenate
