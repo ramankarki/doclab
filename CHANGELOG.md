@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.8.0](https://github.com/ramankarki/doclab/compare/doclab-v1.7.0...doclab-v1.8.0) (2026-06-16)
+
+
+### Features
+
+* add -v/--version flag to print version from package.json ([b322018](https://github.com/ramankarki/doclab/commit/b322018f33318ec2e755c5279eacd59ec8860299))
+
 ## [1.7.0](https://github.com/ramankarki/doclab/compare/doclab-v1.6.0...doclab-v1.7.0) (2026-06-16)
 
 
