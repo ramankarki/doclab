@@ -361,4 +361,4 @@ git push → open PR → CI runs (typecheck + test + build + commitlint)
 
 ## License
 
-MIT
+Apache License 2.0
