@@ -11,7 +11,6 @@
  *  POST /rebuild  — full re-index
  */
 
-import type { Database } from 'bun:sqlite'
 import type {
   DlConfig,
   SearchRequest,
