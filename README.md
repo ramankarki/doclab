@@ -6,6 +6,27 @@
 
 Agents write stale code because their training data is old. **doclab** gives them fresh documentation, articles, and technical references on demand — local, private, fast. Any URL: framework docs, blog posts, tutorials, API references, migration guides.
 
+## Contents
+
+- [Quick Start](#quick-start)
+- [Requirements](#requirements)
+- [Why doclab?](#why-doclab)
+- [How It Works](#how-it-works)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Commands](#commands)
+- [Config](#config)
+- [Sources — Any URL](#sources--any-url)
+- [Best Practices](#best-practices)
+- [Agent Integration](#agent-integration)
+- [HTTP API](#http-api)
+- [Resource Profile](#resource-profile)
+- [Logs](#logs)
+- [Degraded Mode](#degraded-mode)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Quick Start
 
 ```bash
@@ -96,6 +117,22 @@ Agent asks "how to use Bun with Drizzle ORM"
 - **Hybrid search** — vector ANN + FTS5/BM25 keyword + Reciprocal Rank Fusion
 - **SQLite + sqlite-vec** — zero infrastructure, WAL mode, concurrent reads
 - **Auto-rebuild** — configurable timer (default 24h) re-fetches sources, removes dead URLs
+
+## Tech Stack
+
+| Layer | Technology | Role |
+|-------|------------|------|
+| **Runtime** | [Bun](https://bun.sh) ≥1.1.0 | Server, CLI, bundler, test runner |
+| **Language** | TypeScript 5.7+ | All source code |
+| **HTTP server** | `Bun.serve` | Daemon + CLI server |
+| **Database** | SQLite + [sqlite-vec](https://github.com/asg017/sqlite-vec) | Storage + vector ANN search |
+| **Full-text search** | SQLite FTS5 + BM25 | Keyword retrieval |
+| **Hybrid fusion** | Reciprocal Rank Fusion (RRF) | Merge vector + keyword results |
+| **Embeddings** | Ollama (`nomic-embed-text`), OpenAI, Voyage AI | Pluggable embedding providers |
+| **HTML→Markdown** | [turndown](https://github.com/mixmark-io/turndown) + GFM plugin | Page content extraction |
+| **URL fetching** | Direct `fetch` + Jina AI fallback | SPA rendering, Cloudflare bypass |
+| **Config** | JSON (`~/.doclab/dlconfig.json`) | Sources, embedding, rebuild interval |
+| **Dev/CI** | Prettier, `tsc --noEmit`, commitlint, Husky, GitHub Actions | Format, typecheck, lint, CI |
 
 ## Commands
 
