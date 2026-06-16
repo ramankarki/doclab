@@ -280,6 +280,33 @@ export function insertEmbedding(
   )
 }
 
+/** Batch insert embeddings in a single transaction. Much faster than N individual calls. */
+export function insertEmbeddings(
+  db: Database,
+  rows: Array<{ rowid: number; embedding: Float32Array }>,
+  dimensions: number
+): void {
+  if (rows.length === 0) return
+
+  const tableName = `chunk_embeddings_${dimensions}d`
+  const deleteStmt = db.prepare(`DELETE FROM ${tableName} WHERE rowid = ?`)
+  const insertStmt = db.prepare(
+    `INSERT INTO ${tableName}(rowid, embedding) VALUES (?, vec_f32(?))`
+  )
+
+  db.exec('BEGIN')
+  try {
+    for (const { rowid, embedding } of rows) {
+      deleteStmt.run(rowid)
+      insertStmt.run(rowid, embedding)
+    }
+    db.exec('COMMIT')
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
+  }
+}
+
 export function searchSimilar(
   db: Database,
   queryEmbedding: Float32Array,

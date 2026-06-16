@@ -8,7 +8,7 @@
 import { ollamaEmbed, checkOllama } from './ollama'
 import type { EmbeddingConfig } from '../types'
 
-const BATCH_SIZE = 256
+const BATCH_SIZE = 5
 const OPENAI_BATCH = 2048
 const MAX_RETRIES = 3
 const RETRY_DELAYS = [1000, 2000, 4000] // ms

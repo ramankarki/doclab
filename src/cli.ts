@@ -816,7 +816,7 @@ function renderProgress(e: ProgressEvent) {
       process.stdout.write(`\r\x1b[2K[${e.done}/${e.total}] Embedding chunks...`)
       break
     case 'embed:done':
-      console.log(`(${e.durationMs}ms)`)
+      console.log(`Embedding done (${e.durationMs}ms)`)
       break
     case 'llms-expand:start':
       console.log(`Expanding ${e.count} sub-pages...`)

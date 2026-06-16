@@ -34,7 +34,7 @@ import {
   listSources,
   deleteSource,
   insertChunk,
-  insertEmbedding,
+  insertEmbeddings,
   deleteChunksForSource,
   getChunkCount,
   ensureVecTable,
@@ -600,49 +600,77 @@ async function addSource(
   const { config } = loadConfig()
   state.config = config
 
-  // Insert chunks first (before embedding — they persist even if embed fails)
+  // Start embedding in parallel with DB writes — they don't depend on each other.
+  // Embedding is the bottleneck (~110s), DB writes (~5s) overlap completely.
+  let embedPromise: Promise<Float32Array[]> | null = null
+  let embedDims = 0
+
+  if (state.embedder && chunks.length > 0) {
+    embedDims = await state.embedder.getDimensions()
+    ensureVecTable(db, embedDims)
+    state.embeddingDims = embedDims
+
+    const embedTexts = chunks.map((c) => `${c.sectionPath}\n${c.header}\n\n${c.content}`)
+
+    onProgress?.({ type: 'embed:start', total: chunks.length })
+    const embedStart = Date.now()
+
+    // Fire embedding request — don't await. Ollama runs while DB writes happen.
+    embedPromise = state.embedder.embedBatch(embedTexts, (done, total) => {
+      onProgress?.({ type: 'embed:progress', done, total })
+    }).then((embs) => {
+      onProgress?.({ type: 'embed:done', durationMs: Date.now() - embedStart })
+      return embs
+    })
+  }
+
+  // Insert chunks while embedding runs
   if (chunks.length > 0) {
-    for (const c of chunks) {
-      const hash = chunkHash(finalName, c.sectionPath)
-      insertChunk(db, {
-        hash,
-        source: finalName,
-        sectionPath: c.sectionPath,
-        header: c.header,
-        content: c.content,
-        hasCodeBlocks: c.hasCodeBlocks
-      })
+    db.exec('BEGIN')
+    try {
+      for (const c of chunks) {
+        const hash = chunkHash(finalName, c.sectionPath)
+        insertChunk(db, {
+          hash,
+          source: finalName,
+          sectionPath: c.sectionPath,
+          header: c.header,
+          content: c.content,
+          hasCodeBlocks: c.hasCodeBlocks
+        })
+      }
+      db.exec('COMMIT')
+    } catch (e) {
+      db.exec('ROLLBACK')
+      throw e
     }
   }
 
-  // Embed chunks (best-effort)
-  if (state.embedder && chunks.length > 0) {
+  // Wait for embedding to finish, then store vectors
+  if (embedPromise) {
     try {
-      onProgress?.({ type: 'embed:start', total: chunks.length })
-      const embedStart = Date.now()
+      const embeddings = await embedPromise
 
-      const dims = await state.embedder.getDimensions()
-      ensureVecTable(db, dims)
-      state.embeddingDims = dims
+      // Build hash→rowid map in one query
+      const hashRows = db
+        .prepare('SELECT id, hash FROM chunks WHERE source = ?')
+        .all(finalName) as { id: number; hash: string }[]
+      const hashToRowid = new Map(hashRows.map((r) => [r.hash, r.id]))
 
-      const embedTexts = chunks.map((c) => `${c.sectionPath}\n${c.header}\n\n${c.content}`)
-      const embeddings = await state.embedder!.embedBatch(embedTexts, (done, total) => {
-        onProgress?.({ type: 'embed:progress', done, total })
-      })
-
+      const embedRows: Array<{ rowid: number; embedding: Float32Array }> = []
       for (let i = 0; i < chunks.length; i++) {
         if (embeddings[i]) {
           const hash = chunkHash(finalName, chunks[i].sectionPath)
-          const row = db
-            .prepare('SELECT id FROM chunks WHERE hash = ?')
-            .get(hash) as { id: number } | undefined
-          if (row) {
-            insertEmbedding(db, row.id, embeddings[i], dims)
+          const rowid = hashToRowid.get(hash)
+          if (rowid != null) {
+            embedRows.push({ rowid, embedding: embeddings[i] })
           }
         }
       }
 
-      onProgress?.({ type: 'embed:done', durationMs: Date.now() - embedStart })
+      if (embedRows.length > 0) {
+        insertEmbeddings(db, embedRows, embedDims)
+      }
     } catch (e: any) {
       console.error(
         `[doclab] Embedding failed for ${finalName}: ${e.message}. Chunks searchable via keyword only.`
