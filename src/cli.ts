@@ -77,6 +77,13 @@ async function main() {
     case 'init':
       await cmdInit()
       break
+    case 'queue':
+    case 'q':
+      await cmdQueue()
+      break
+    case 'log':
+      await cmdLog()
+      break
     case 'mem':
     case 'memory':
       await cmdMem()
@@ -229,34 +236,15 @@ async function cmdAdd(args: string[]) {
 
   const port = await ensureDaemon()
 
+  // Always detach — worker processes in background
   try {
-    const result = await apiPostStream<{ name: string; chunkCount: number }>(
-      port,
-      '/add',
-      { url, name },
-      (e) => renderProgress(e)
-    )
-    console.log(`${c.green}Added "${result.name}" — ${result.chunkCount} chunks indexed${c.reset}`)
-    // Suggest llms-full.txt / llms.txt at domain
+    await apiPost(port, '/add?detach=1', { url, name })
+    console.log(`${c.info}queued:${c.reset} ${url}`)
+    console.log(`${c.dim}check status: doclab log${c.reset}`)
     await suggestFullDocs(url, port)
-  } catch (streamErr: any) {
-    // Bun streaming bug (#32120) — daemon may have crashed, retry non-streaming
-    const fallbackPort = await ensureDaemonAlive()
-    console.log(`${c.dim}Retrying without streaming...${c.reset}`)
-    try {
-      const result = await apiPost<SourceMeta>(fallbackPort, '/add', { url, name })
-      if (result) {
-        console.log(
-          `${c.green}Added "${result.name}" — ${result.chunkCount} chunks indexed${c.reset}`
-        )
-        await suggestFullDocs(url, fallbackPort)
-      } else {
-        throw new Error('Failed to add source')
-      }
-    } catch (e: any) {
-      console.error(`\n${c.error}${e.message}${c.reset}`)
-      process.exit(1)
-    }
+  } catch (e: any) {
+    console.error(`${c.error}${e.message}${c.reset}`)
+    process.exit(1)
   }
 }
 
@@ -472,6 +460,126 @@ async function cmdRebuild() {
 async function cmdInit() {
   console.log(generateAgentInstructions())
   console.log('\n# Append the above to your AGENTS.md or project instructions file.')
+}
+
+async function cmdQueue() {
+  const port = await ensureDaemon()
+
+  const queue = await apiGet<{
+    processing: boolean
+    pending: number
+    items: Array<{ type: string; url?: string; name?: string; id: number }>
+  }>(port, '/queue')
+
+  if (!queue || queue.pending === 0) {
+    console.log('Queue empty.')
+    return
+  }
+
+  if (queue.processing) {
+    const current = queue.items[0]
+    if (current) {
+      console.log(`${c.info}Processing:${c.reset} ${current.type} ${current.url || current.name || ''}`)
+    }
+  }
+
+  const pending = queue.processing ? queue.items.slice(1) : queue.items
+  if (pending.length > 0) {
+    console.log(`${c.label}Pending:${c.reset} ${pending.length} item(s)`)
+    for (const item of pending) {
+      console.log(`  ${item.type}: ${item.url || item.name || ''}`)
+    }
+  }
+}
+
+async function cmdLog() {
+  const port = await ensureDaemon()
+
+  console.log(`${c.bold}Attached to worker log. Ctrl+C to detach.${c.reset}\n`)
+
+  const response = await fetch(`http://127.0.0.1:${port}/log`)
+
+  if (!response.ok || !response.body) {
+    console.error(`${c.error}Failed to connect to log stream${c.reset}`)
+    process.exit(1)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      if (!line.trim()) continue
+      let event: any
+      try { event = JSON.parse(line) } catch { continue }
+
+      renderLogEvent(event)
+    }
+  }
+}
+
+function renderLogEvent(e: any) {
+  // Sticky state for paired events (fetch:start → fetch:done)
+  if ((renderLogEvent as any)._fetchName === undefined) {
+    ;(renderLogEvent as any)._fetchName = ''
+  }
+
+  const now = new Date().toLocaleTimeString()
+  const ts = `${c.dim}${now}${c.reset}`
+
+  switch (e.type) {
+    case 'queue:enqueue':
+      console.log(`${ts} ${c.info}enqueued${c.reset} ${e.jobType}: ${e.url || e.name || ''}`)
+      break
+    case 'queue:start':
+      console.log(`${ts} ${c.info}started${c.reset}  ${e.jobType}: ${e.url || e.name || ''}`)
+      break
+    case 'queue:done':
+      if (e.error) {
+        console.log(`${ts} ${c.error}failed${c.reset}  ${e.jobType}: ${e.error}`)
+      } else {
+        console.log(`${ts} ${c.success}done${c.reset}    ${e.jobType}: ${e.url || e.name || ''}`)
+      }
+      break
+    case 'fetch:start':
+      ;(renderLogEvent as any)._fetchName = e.name
+      break
+    case 'fetch:done':
+      console.log(`${ts} fetched: ${(renderLogEvent as any)._fetchName} (${formatBytes(e.bytes)}, ${e.durationMs}ms)`)
+      break
+    case 'convert:start':
+    case 'convert:done':
+      break // skip, too noisy
+    case 'chunk:start':
+      break
+    case 'chunk:done':
+      console.log(`${ts} chunked: ${e.count} chunks`)
+      break
+    case 'embed:start':
+      break
+    case 'embed:progress':
+      console.log(`${ts} embedding: ${e.done}/${e.total}`)
+      break
+    case 'embed:done':
+      console.log(`${ts} embedding: done (${(e.durationMs / 1000).toFixed(1)}s)`)
+      break
+    case 'llms-expand:start':
+      console.log(`${ts} expanding: ${e.count} sub-pages`)
+      break
+    case 'llms-expand:done':
+      if (e.failed > 0) console.log(`${ts} ${e.failed} sub-page(s) failed`)
+      break
+    case 'subfetch:progress':
+      break // too noisy, llms-expand:start/done covers it
+  }
 }
 
 async function cmdMem() {
@@ -818,6 +926,10 @@ function renderProgress(e: ProgressEvent) {
     case 'embed:done':
       console.log(`Embedding done (${e.durationMs}ms)`)
       break
+    case 'queue:wait':
+      console.log(`${c.info}Queued (position ${(e as any).position}). Waiting...${c.reset}`)
+      console.log(`${c.dim}Use -d to run in background${c.reset}`)
+      break
     case 'llms-expand:start':
       console.log(`Expanding ${e.count} sub-pages...`)
       break
@@ -1068,7 +1180,7 @@ function printHelp() {
     `  ${c.cyan}mem | memory${c.reset}              ${c.dim}Real-time memory usage${c.reset}`
   )
   console.log(
-    `  ${c.cyan}add${c.reset} ${c.dim}<url>${c.reset} ${c.dim}[--name <n>]${c.reset}    ${c.dim}Add source: fetch → chunk → embed${c.reset}`
+    `  ${c.cyan}add${c.reset} ${c.dim}<url>${c.reset} ${c.dim}[--name <n>]${c.reset}    ${c.dim}Add source to queue (worker processes in background)${c.reset}`
   )
   console.log(
     `  ${c.cyan}remove | rm${c.reset} ${c.dim}<name>${c.reset}        ${c.dim}Remove source${c.reset}`
@@ -1087,6 +1199,12 @@ function printHelp() {
   )
   console.log(
     `  ${c.cyan}init${c.reset}                      ${c.dim}Generate AGENTS.md snippet${c.reset}`
+  )
+  console.log(
+    `  ${c.cyan}queue | q${c.reset}                  ${c.dim}Show write queue${c.reset}`
+  )
+  console.log(
+    `  ${c.cyan}log${c.reset}                       ${c.dim}Attach to live worker log${c.reset}`
   )
   console.log()
   console.log(`${c.bold}Search options:${c.reset}`)

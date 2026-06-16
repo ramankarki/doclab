@@ -37,7 +37,11 @@ import {
   deleteChunksForSource,
   getChunkCount,
   ensureVecTable,
-  dropAllChunks
+  dropAllChunks,
+  enqueueJob,
+  dequeueJob,
+  peekQueue,
+  listQueue
 } from './db'
 import { loadConfig, saveConfig, addSourceToConfig, removeSourceFromConfig } from './config'
 import { c } from './lib/colors'
@@ -81,10 +85,19 @@ export function createServer(state: ServerState, onRequest?: () => void) {
           return handleListSources()
         }
 
+        if (path === '/queue' && method === 'GET') {
+          return handleQueue(state)
+        }
+
+        if (path === '/log' && method === 'GET') {
+          return handleLog()
+        }
+
         if (path === '/add' && method === 'POST') {
-          return url.searchParams.has('stream')
-            ? handleAddStream(req, state)
-            : handleAdd(req, state)
+          const isDetach = url.searchParams.has('detach')
+          const isStream = url.searchParams.has('stream')
+          if (isStream && !isDetach) return handleAddStream(req, state)
+          return handleAdd(req, state, isDetach)
         }
 
         if (path === '/remove' && method === 'POST') {
@@ -92,15 +105,15 @@ export function createServer(state: ServerState, onRequest?: () => void) {
         }
 
         if (path === '/pull' && method === 'POST') {
-          return url.searchParams.has('stream')
-            ? handlePullStream(req, state)
-            : handlePull(req, state)
+          const isStream = url.searchParams.has('stream')
+          if (isStream) return handlePullStream(req, state)
+          return handlePull(req, state)
         }
 
         if (path === '/rebuild' && method === 'POST') {
-          return url.searchParams.has('stream')
-            ? handleRebuildStream(state)
-            : handleRebuild(state)
+          const isStream = url.searchParams.has('stream')
+          if (isStream) return handleRebuildStream(state)
+          return handleRebuild(state)
         }
 
         return json({ error: 'Not found', code: 'NOT_FOUND' }, 404)
@@ -118,6 +131,153 @@ export function createServer(state: ServerState, onRequest?: () => void) {
   })
 
   return server
+}
+
+// ─── Queue system (DB-backed pub/sub — survives crashes) ───
+//  Pattern: HTTP handlers publish jobs to DB queue. Worker picks FIFO.
+//  /log endpoint streams real-time progress to attached clients.
+
+/** In-memory callbacks for HTTP handlers waiting on their queued job. */
+const pendingCallbacks = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>()
+
+/** Active /log subscribers — each gets a copy of every progress event. */
+const logSubscribers = new Set<ReadableStreamDefaultController<any>>()
+
+let workerRunning = false
+
+function broadcast(event: ProgressEvent | { type: string; [key: string]: any }): void {
+  const line = JSON.stringify(event) + '\n'
+  const dead: ReadableStreamDefaultController<any>[] = []
+  for (const ctrl of logSubscribers) {
+    try { ctrl.enqueue(new TextEncoder().encode(line)) } catch { dead.push(ctrl) }
+  }
+  for (const ctrl of dead) logSubscribers.delete(ctrl)
+}
+
+/** Publish a job to DB queue. Returns job id. */
+function enqueue(
+  state: ServerState,
+  job: { type: 'add' | 'remove' | 'pull' | 'rebuild'; url?: string; name?: string },
+  resolve?: (v: any) => void,
+  reject?: (e: any) => void
+): number {
+  const db = getDb()
+  const id = enqueueJob(db, job)
+  if (resolve && reject) {
+    pendingCallbacks.set(id, { resolve, reject })
+  }
+  broadcast({ type: 'queue:enqueue', jobType: job.type, url: job.url, name: job.name })
+  startWorker(state)
+  return id
+}
+
+function startWorker(state: ServerState): void {
+  if (workerRunning) return
+  workerRunning = true
+  processQueue(state).finally(() => {
+    workerRunning = false
+    if (peekQueue(getDb())) startWorker(state)
+  })
+}
+
+/** Worker: picks jobs from DB FIFO, processes, notifies callbacks. */
+export async function processQueue(state: ServerState): Promise<void> {
+  const db = getDb()
+
+  while (true) {
+    const job = peekQueue(db)
+    if (!job) break
+
+    state.isWriting = true
+    broadcast({ type: 'queue:start', jobType: job.type, url: job.url, name: job.name })
+
+    let result: any = null
+    let error: Error | null = null
+
+    try {
+      if (job.type === 'add') {
+        if (!job.url) throw new Error('Missing url for add job')
+        result = await addSource(
+          job.url,
+          job.name ?? undefined,
+          state,
+          (e) => broadcast(e)
+        )
+      } else if (job.type === 'remove') {
+        if (!job.name) throw new Error('Missing name for remove job')
+        deleteSource(db, job.name)
+        removeSourceFromConfig(job.name)
+        const { config } = loadConfig()
+        state.config = config
+        result = { ok: true }
+      } else if (job.type === 'pull') {
+        result = { updated: await pullSources(job.name ?? undefined, state, (e) => broadcast(e)) }
+      } else if (job.type === 'rebuild') {
+        const dims = getDimensions()
+        dropAllChunks(db, dims ?? undefined)
+        const { config: freshConfig } = loadConfig()
+        state.config = freshConfig
+        for (const src of freshConfig.sources) {
+          try {
+            await addSource(src.url, src.name, state, (e) => broadcast(e))
+          } catch (e: any) {
+            console.error(`${c.error}[doclab]${c.reset} Rebuild failed for ${src.name}:`, e.message)
+          }
+        }
+        result = { ok: true }
+      }
+    } catch (e: any) {
+      error = e
+      console.error(`${c.error}[doclab]${c.reset} Queue job ${job.type} failed:`, e.message)
+    } finally {
+      state.isWriting = false
+    }
+
+    broadcast({ type: 'queue:done', jobType: job.type, url: job.url, name: job.name, error: error?.message })
+
+    // Notify waiting HTTP handler
+    const cb = pendingCallbacks.get(job.id)
+    if (cb) {
+      if (error) cb.reject(error)
+      else cb.resolve(result)
+      pendingCallbacks.delete(job.id)
+    }
+
+    dequeueJob(db, job.id)
+  }
+}
+
+function handleQueue(state: ServerState): Response {
+  const db = getDb()
+  const items = listQueue(db)
+  return json({
+    processing: state.isWriting,
+    pending: items.length,
+    items: items.map((j) => ({ type: j.type, url: j.url, name: j.name, id: j.id }))
+  })
+}
+
+function handleLog(): Response {
+  const stream = new ReadableStream({
+    start(controller) {
+      // Send immediate welcome so client knows connection is live
+      controller.enqueue(new TextEncoder().encode(JSON.stringify({ type: 'connected' }) + '\n'))
+      logSubscribers.add(controller)
+      // Keepalive every 120s to prevent Bun idle timeout (max 255s)
+      const keepalive = setInterval(() => {
+        try { controller.enqueue(new TextEncoder().encode(' ')) } catch {
+          clearInterval(keepalive)
+          logSubscribers.delete(controller)
+        }
+      }, 120_000)
+    },
+    cancel() {
+      // Client disconnected — cleanup happens when broadcast hits dead subscriber
+    }
+  })
+  return new Response(stream, {
+    headers: { 'Content-Type': 'application/x-ndjson' }
+  })
 }
 
 // ─── Handlers ───
@@ -169,12 +329,18 @@ async function handleSearch(req: Request, state: ServerState): Promise<Response>
   // Get query embedding if embedder available
   let queryEmbedding: Float32Array | null = null
   if (state.embedder) {
-    try {
-      const embeddings = await state.embedder.embedBatch([body.query])
-      queryEmbedding = embeddings[0]
-    } catch (e: any) {
-      console.error(`${c.error}[doclab]${c.reset} Embedding failed:`, e.message)
-      // Degraded mode — keyword only
+    // Retry up to 2 times — intermittent Ollama contention can cause transient failures
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const embeddings = await state.embedder.embedBatch([body.query])
+        queryEmbedding = embeddings[0]
+        break
+      } catch (e: any) {
+        if (attempt === 1) {
+          console.error(`${c.error}[doclab]${c.reset} Embedding failed (retries exhausted):`, e.message)
+        }
+        await new Promise((r) => setTimeout(r, 500))
+      }
     }
   }
 
@@ -200,17 +366,7 @@ function handleListSources(): Response {
   }
 }
 
-async function handleAdd(req: Request, state: ServerState): Promise<Response> {
-  if (state.isWriting) {
-    return json(
-      {
-        error: 'Another operation in progress',
-        code: 'WRITE_IN_PROGRESS'
-      },
-      409
-    )
-  }
-
+async function handleAdd(req: Request, state: ServerState, isDetach: boolean): Promise<Response> {
   let body: { url: string; name?: string }
   try {
     body = await req.json()
@@ -222,32 +378,30 @@ async function handleAdd(req: Request, state: ServerState): Promise<Response> {
     return json({ error: "Missing 'url' field", code: 'BAD_REQUEST' }, 400)
   }
 
-  state.isWriting = true
-  try {
-    const result = await addSource(body.url, body.name, state)
-    return json(result)
-  } catch (e: any) {
-    if (e instanceof FetchError) {
-      return json(
-        {
-          error: e.message,
-          code: e.code,
-          hint: 'Check the URL and try again'
-        },
-        400
-      )
-    }
-    return json({ error: e.message, code: 'INTERNAL' }, 500)
-  } finally {
-    state.isWriting = false
+  // Detached mode: enqueue and respond immediately
+  if (isDetach) {
+    enqueue(state, { type: 'add', url: body.url, name: body.name })
+    return json({ queued: true, name: body.name ?? body.url, url: body.url })
   }
+
+  // Normal mode: enqueue with callback, block until done
+  return new Promise<Response>((resolve) => {
+    enqueue(
+      state,
+      { type: 'add', url: body.url, name: body.name },
+      (result) => resolve(json(result)),
+      (e: any) => {
+        if (e?.code && e?.message) {
+          resolve(json({ error: e.message, code: e.code, hint: 'Check the URL and try again' }, 400))
+        } else {
+          resolve(json({ error: e?.message ?? 'Internal error', code: 'INTERNAL' }, 500))
+        }
+      }
+    )
+  })
 }
 
 async function handleRemove(req: Request, state: ServerState): Promise<Response> {
-  if (state.isWriting) {
-    return json({ error: 'Another operation in progress', code: 'WRITE_IN_PROGRESS' }, 409)
-  }
-
   let body: { name: string }
   try {
     body = await req.json()
@@ -259,27 +413,17 @@ async function handleRemove(req: Request, state: ServerState): Promise<Response>
     return json({ error: "Missing 'name' field", code: 'BAD_REQUEST' }, 400)
   }
 
-  state.isWriting = true
-  try {
-    const db = getDb()
-    deleteSource(db, body.name)
-    removeSourceFromConfig(body.name)
-    // Reload config
-    const { config } = loadConfig()
-    state.config = config
-    return json({ ok: true })
-  } catch (e: any) {
-    return json({ error: e.message, code: 'INTERNAL' }, 500)
-  } finally {
-    state.isWriting = false
-  }
+  return new Promise<Response>((resolve) => {
+    enqueue(
+      state,
+      { type: 'remove', name: body.name },
+      (result) => resolve(json(result)),
+      (e: any) => resolve(json({ error: e?.message ?? 'Internal error', code: 'INTERNAL' }, 500))
+    )
+  })
 }
 
 async function handlePull(req: Request, state: ServerState): Promise<Response> {
-  if (state.isWriting) {
-    return json({ error: 'Another operation in progress', code: 'WRITE_IN_PROGRESS' }, 409)
-  }
-
   let body: { name?: string }
   try {
     body = await req.json()
@@ -287,50 +431,30 @@ async function handlePull(req: Request, state: ServerState): Promise<Response> {
     body = {}
   }
 
-  state.isWriting = true
-  try {
-    const updated = await pullSources(body.name, state)
-    return json({ updated })
-  } catch (e: any) {
-    return json({ error: e.message, code: 'INTERNAL' }, 500)
-  } finally {
-    state.isWriting = false
-  }
+  return new Promise<Response>((resolve) => {
+    enqueue(
+      state,
+      { type: 'pull', name: body.name },
+      (result) => resolve(json(result)),
+      (e: any) => resolve(json({ error: e?.message ?? 'Internal error', code: 'INTERNAL' }, 500))
+    )
+  })
 }
 
 async function handleRebuild(state: ServerState): Promise<Response> {
-  if (state.isWriting) {
-    return json({ error: 'Another operation in progress', code: 'WRITE_IN_PROGRESS' }, 409)
-  }
-
-  state.isWriting = true
-  try {
-    const db = getDb()
-    const dims = getDimensions()
-    dropAllChunks(db, dims ?? undefined)
-
-    // Reload config
-    const { config: freshConfig } = loadConfig()
-    state.config = freshConfig
-
-    // Re-index all sources
-    for (const src of freshConfig.sources) {
-      try {
-        await addSource(src.url, src.name, state)
-      } catch (e: any) {
-        console.error(`${c.error}[doclab]${c.reset} Rebuild failed for ${src.name}:`, e.message)
-      }
-    }
-
-    return json({ ok: true })
-  } catch (e: any) {
-    return json({ error: e.message, code: 'INTERNAL' }, 500)
-  } finally {
-    state.isWriting = false
-  }
+  return new Promise<Response>((resolve) => {
+    enqueue(
+      state,
+      { type: 'rebuild' },
+      (result) => resolve(json(result)),
+      (e: any) => resolve(json({ error: e?.message ?? 'Internal error', code: 'INTERNAL' }, 500))
+    )
+  })
 }
 
-// ─── Streaming handlers ───
+// ─── Streaming handlers (queue-aware — wait for turn, then stream) ───
+
+// ─── Streaming handlers (queue-aware — wait for turn, then stream) ───
 
 function streamResponse(stream: ReadableStream): Response {
   return new Response(stream, {
@@ -339,10 +463,6 @@ function streamResponse(stream: ReadableStream): Response {
 }
 
 async function handleAddStream(req: Request, state: ServerState): Promise<Response> {
-  if (state.isWriting) {
-    return json({ error: 'Another operation in progress', code: 'WRITE_IN_PROGRESS' }, 409)
-  }
-
   let body: { url: string; name?: string }
   try {
     body = await req.json()
@@ -354,38 +474,31 @@ async function handleAddStream(req: Request, state: ServerState): Promise<Respon
     return json({ error: "Missing 'url' field", code: 'BAD_REQUEST' }, 400)
   }
 
-  state.isWriting = true
+  // Always enqueue — worker picks and processes
+  const count = listQueue(getDb()).length
 
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder()
-      const queue: Uint8Array[] = []
-      const emit = (e: ProgressEvent) => queue.push(encoder.encode(JSON.stringify(e) + '\n'))
-
-      const flush = () => {
-        while (queue.length > 0) {
-          try { controller.enqueue(queue.shift()!) } catch { return }
-        }
+      const emit = (e: any) => {
+        try { controller.enqueue(encoder.encode(JSON.stringify(e) + '\n')) } catch {}
       }
-      const interval = setInterval(flush, 50)
 
-      addSource(body.url, body.name, state, emit)
-        .then((result) => {
+      // Show queue position, then return immediately — not waiting for result
+      emit({ type: 'queue:wait', position: count + 1 })
+
+      enqueue(
+        state,
+        { type: 'add', url: body.url, name: body.name },
+        (result) => {
           emit({ type: 'result', name: result.name, chunkCount: result.chunkCount })
-        })
-        .catch((e: any) => {
-          if (e instanceof FetchError) {
-            emit({ type: 'error', message: e.message, code: e.code })
-          } else {
-            emit({ type: 'error', message: e.message })
-          }
-        })
-        .finally(() => {
-          clearInterval(interval)
-          flush()
-          state.isWriting = false
           try { controller.close() } catch {}
-        })
+        },
+        (e: any) => {
+          emit({ type: 'error', message: e?.message ?? 'Queue job failed' })
+          try { controller.close() } catch {}
+        }
+      )
     }
   })
 
@@ -393,15 +506,16 @@ async function handleAddStream(req: Request, state: ServerState): Promise<Respon
 }
 
 async function handlePullStream(req: Request, state: ServerState): Promise<Response> {
-  if (state.isWriting) {
-    return json({ error: 'Another operation in progress', code: 'WRITE_IN_PROGRESS' }, 409)
-  }
-
   let body: { name?: string }
   try {
     body = await req.json()
   } catch {
     body = {}
+  }
+
+  if (peekQueue(getDb())) {
+    enqueue(state, { type: 'pull', name: body.name })
+    return json({ queued: true })
   }
 
   state.isWriting = true
@@ -436,6 +550,7 @@ async function handlePullStream(req: Request, state: ServerState): Promise<Respo
           clearInterval(interval)
           flush()
           state.isWriting = false
+          if (peekQueue(getDb())) processQueue(state)
           try { controller.close() } catch {}
         })
     }
@@ -445,8 +560,9 @@ async function handlePullStream(req: Request, state: ServerState): Promise<Respo
 }
 
 async function handleRebuildStream(state: ServerState): Promise<Response> {
-  if (state.isWriting) {
-    return json({ error: 'Another operation in progress', code: 'WRITE_IN_PROGRESS' }, 409)
+  if (peekQueue(getDb())) {
+    enqueue(state, { type: 'rebuild' })
+    return json({ queued: true })
   }
 
   state.isWriting = true
@@ -498,6 +614,7 @@ async function handleRebuildStream(state: ServerState): Promise<Response> {
           clearInterval(interval)
           flush()
           state.isWriting = false
+          if (peekQueue(getDb())) processQueue(state)
           try { controller.close() } catch {}
         })
     }

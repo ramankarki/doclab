@@ -171,3 +171,4 @@ export type ProgressEvent =
   | { type: 'llms-expand:start'; count: number }
   | { type: 'llms-expand:done'; failed: number }
   | { type: 'subfetch:progress'; index: number; total: number; file: string }
+  | { type: 'queue:wait'; position: number }

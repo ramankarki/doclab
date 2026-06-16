@@ -129,6 +129,16 @@ async function main() {
 
   log(`${c.success}[OK]${c.reset} Ready on http://127.0.0.1:${port}`)
 
+  // ── Resume any queue items left from previous crash ──
+  const { processQueue } = await import('./server')
+  const db = getDb()
+  const { listQueue } = await import('./db')
+  const remaining = listQueue(db)
+  if (remaining.length > 0) {
+    log(`${c.info}[doclab]${c.reset} Resuming ${remaining.length} queued job(s) from previous session...`)
+    processQueue(state)
+  }
+
   // ── Start idle timer ──
   resetIdleTimer(config)
 
@@ -179,6 +189,21 @@ function resetIdleTimer(config: DlConfig) {
   if (timeoutMs === 0) return // 'never'
 
   idleTimer = setTimeout(() => {
+    // Don't shut down if queue still has pending jobs
+    if (state && state.isWriting) {
+      resetIdleTimer(config)
+      return
+    }
+    // Check DB queue
+    try {
+      const db = getDb()
+      const row = db.prepare('SELECT COUNT(*) as c FROM write_queue').get() as any
+      if (row?.c > 0) {
+        resetIdleTimer(config)
+        return
+      }
+    } catch {}
+
     log(`${c.info}[doclab]${c.reset} Idle timeout (${config.idleTimeout}). Shutting down.`)
     process.kill(process.pid, 'SIGTERM')
   }, timeoutMs)

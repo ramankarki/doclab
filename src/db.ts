@@ -161,6 +161,15 @@ function runMigrations(db: Database): void {
       INSERT INTO chunks_fts(rowid, content, header, section_path)
       VALUES (new.id, new.content, new.header, new.section_path);
     END;
+
+    /* Write queue — survives daemon crashes. Processed FIFO. */
+    CREATE TABLE IF NOT EXISTS write_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL CHECK(type IN ('add','remove','pull','rebuild')),
+      url TEXT,
+      name TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `)
 }
 
@@ -372,6 +381,14 @@ export function searchSimilar(
 }
 
 export function deleteChunksForSource(db: Database, source: string): void {
+  // Delete embeddings first (vec0 cascade doesn't work automatically)
+  const dims = getDimensions()
+  if (dims) {
+    const tableName = `chunk_embeddings_${dims}d`
+    db.prepare(
+      `DELETE FROM ${tableName} WHERE rowid IN (SELECT id FROM chunks WHERE source = ?)`
+    ).run(source)
+  }
   db.prepare('DELETE FROM chunks WHERE source = ?').run(source)
 }
 
@@ -418,4 +435,40 @@ export function closeDb(): void {
     _db = null
     _vecLoaded = false
   }
+}
+
+// ── Write queue ──
+
+export interface QueueRow {
+  id: number
+  type: 'add' | 'remove' | 'pull' | 'rebuild'
+  url: string | null
+  name: string | null
+}
+
+export function enqueueJob(
+  db: Database,
+  job: { type: QueueRow['type']; url?: string; name?: string }
+): number {
+  const result = db
+    .prepare('INSERT INTO write_queue (type, url, name) VALUES (?, ?, ?)')
+    .run(job.type, job.url ?? null, job.name ?? null)
+  return Number(result.lastInsertRowid)
+}
+
+export function dequeueJob(db: Database, id: number): void {
+  db.prepare('DELETE FROM write_queue WHERE id = ?').run(id)
+}
+
+export function peekQueue(db: Database): QueueRow | null {
+  const row = db
+    .prepare('SELECT * FROM write_queue ORDER BY id ASC LIMIT 1')
+    .get() as QueueRow | undefined
+  return row ?? null
+}
+
+export function listQueue(db: Database): QueueRow[] {
+  return db
+    .prepare('SELECT * FROM write_queue ORDER BY id ASC')
+    .all() as QueueRow[]
 }
