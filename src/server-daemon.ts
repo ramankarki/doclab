@@ -130,13 +130,13 @@ async function main() {
   log(`${c.success}[OK]${c.reset} Ready on http://127.0.0.1:${port}`)
 
   // ── Resume any queue items left from previous crash ──
-  const { processQueue } = await import('./server')
+  const { startWorker: startQueueWorker } = await import('./server')
   const db = getDb()
   const { listQueue } = await import('./db')
   const remaining = listQueue(db)
   if (remaining.length > 0) {
     log(`${c.info}[doclab]${c.reset} Resuming ${remaining.length} queued job(s) from previous session...`)
-    processQueue(state)
+    startQueueWorker(state)
   }
 
   // ── Start idle timer ──

@@ -435,9 +435,11 @@ SQLite in WAL mode handles concurrent reads natively. Writes are serialized thro
 | Two `add` calls simultaneously         | ✅ Second add enqueued, processed after first completes.      |
 | Two `pull` calls simultaneously        | ✅ Second pull enqueued. No 409 errors.                       |
 
-**Queue system:** All write operations (add, remove, pull, rebuild) are enqueued to a `write_queue` table in SQLite. A worker loop picks jobs FIFO, processes them sequentially, and broadcasts progress to `/log` subscribers. The queue survives daemon crashes — unfinished jobs are resumed on restart.
+**Queue system:** All write operations (add, remove, pull, rebuild) are enqueued to a `write_queue` table in SQLite. A single worker loop picks jobs FIFO, processes them sequentially, and broadcasts progress to `/log` subscribers. The queue survives daemon crashes — unfinished jobs are resumed on restart via `startWorker`, which maintains a `workerRunning` mutex ensuring only one worker runs at a time.
 
-**Write lock:** An in-memory `isWriting` flag prevents the worker from processing multiple jobs simultaneously. HTTP handlers that enqueue with a callback will receive the result when their job completes.
+**Source visibility rule:** A source becomes visible in `doclab list` only after ALL processing completes — fetch, chunk, embed, and vector store. `upsertSource` and `addSourceToConfig` are deferred until after embedding finishes. No gap between "source appears in list" and "queue job removed" — both happen atomically.
+
+**Write lock:** An in-memory `isWriting` flag tracks whether a write is in progress (used by `/health` and idle timeout to avoid mid-job shutdown). HTTP handlers that enqueue with a callback will receive the result when their job completes.
 
 ### 3.13 Daemon Lifecycle
 

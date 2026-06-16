@@ -171,7 +171,7 @@ function enqueue(
   return id
 }
 
-function startWorker(state: ServerState): void {
+export function startWorker(state: ServerState): void {
   if (workerRunning) return
   workerRunning = true
   processQueue(state).finally(() => {
@@ -708,14 +708,6 @@ async function addSource(
   // Delete existing chunks for this source
   deleteChunksForSource(db, finalName)
 
-  // Insert source
-  upsertSource(db, meta)
-
-  // Add to config
-  addSourceToConfig({ name: finalName, url })
-  const { config } = loadConfig()
-  state.config = config
-
   // Start embedding in parallel with DB writes — they don't depend on each other.
   // Embedding is the bottleneck (~110s), DB writes (~5s) overlap completely.
   let embedPromise: Promise<Float32Array[]> | null = null
@@ -793,6 +785,14 @@ async function addSource(
       )
     }
   }
+
+  // Source fully indexed — commit metadata (visible in list only now)
+  upsertSource(db, meta)
+
+  // Add to config
+  addSourceToConfig({ name: finalName, url })
+  const { config } = loadConfig()
+  state.config = config
 
   return meta
 }
