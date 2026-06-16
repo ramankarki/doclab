@@ -445,20 +445,24 @@ async function cmdRebuild() {
   const port = await ensureDaemon()
 
   try {
-    await apiPostStream<{ ok: boolean }>(port, '/rebuild', {}, (e) => renderProgress(e))
-    console.log(`\n${c.green}Rebuild complete${c.reset}`)
-  } catch (streamErr: any) {
-    // Bun streaming bug (#32120) — retry non-streaming
-    const fallbackPort = await ensureDaemonAlive()
-    console.log(`${c.dim}Retrying without streaming...${c.reset}`)
-    try {
-      console.log('Rebuilding...')
-      await apiPost(fallbackPort, '/rebuild', {})
-      console.log(`${c.green}Rebuild complete${c.reset}`)
-    } catch (e: any) {
-      console.error(`${c.error}${e.message}${c.reset}`)
-      process.exit(1)
+    const { config } = loadConfig()
+    const sources = config.sources
+
+    if (sources.length === 0) {
+      console.log(`${c.warn}No sources to rebuild${c.reset}`)
+      return
     }
+
+    // Enqueue each source as individual add job — worker handles dedup naturally
+    for (const src of sources) {
+      await apiPost(port, '/add?detach=1', { url: src.url, name: src.name })
+    }
+
+    console.log(`${c.info}queued ${sources.length} source(s) for rebuild${c.reset}`)
+    console.log(`${c.dim}check status: doclab log${c.reset}`)
+  } catch (e: any) {
+    console.error(`${c.error}${e.message}${c.reset}`)
+    process.exit(1)
   }
 }
 
