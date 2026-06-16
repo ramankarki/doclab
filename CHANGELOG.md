@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.9.1](https://github.com/ramankarki/doclab/compare/doclab-v1.9.0...doclab-v1.9.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* **queue:** defer source visibility to after embed, enforce single worker ([f0a836f](https://github.com/ramankarki/doclab/commit/f0a836f8c53b013b045259a5338fcab7c6ddafa3))
+
 ## [1.9.0](https://github.com/ramankarki/doclab/compare/doclab-v1.8.1...doclab-v1.9.0) (2026-06-16)
 
 
