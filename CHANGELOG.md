@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.9.0](https://github.com/ramankarki/doclab/compare/doclab-v1.8.1...doclab-v1.9.0) (2026-06-16)
+
+
+### Features
+
+* make rebuild non-blocking, enqueue sources for background worker ([23e1ff7](https://github.com/ramankarki/doclab/commit/23e1ff75cb15f02591e6a3ed08d7d1e9d8e25574))
+
 ## [1.8.1](https://github.com/ramankarki/doclab/compare/doclab-v1.8.0...doclab-v1.8.1) (2026-06-16)
 
 
