@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.7.0](https://github.com/ramankarki/doclab/compare/doclab-v1.6.0...doclab-v1.7.0) (2026-06-16)
+
+
+### Features
+
+* **queue:** pub/sub queue system, /log stream, detach add, vec cascade fix ([ffbb083](https://github.com/ramankarki/doclab/commit/ffbb0830a9a007613ac3218666f014804443e4c7))
+
+
+### Performance
+
+* **add:** parallel embed with DB writes, batch inserts, transactions ([d7c7887](https://github.com/ramankarki/doclab/commit/d7c78872ed2e6f6a49b82d26c337c37f6d2ff4d6))
+
+
+### Documentation
+
+* update README and spec for queue system, log command, detach add ([94d2f6f](https://github.com/ramankarki/doclab/commit/94d2f6fc2a547c7cba1ca9db8d96e4c028582d1c))
+
 ## [1.6.0](https://github.com/ramankarki/doclab/compare/doclab-v1.5.0...doclab-v1.6.0) (2026-06-15)
 
 
