@@ -114,7 +114,7 @@ export function loadConfig(): { config: DlConfig; errors: string[] } {
   if (obj.maxChunksPerQuery !== undefined) {
     const n = Number(obj.maxChunksPerQuery)
     if (isNaN(n) || n < 1) {
-      errors.push(`dlconfig.json: Invalid maxChunksPerQuery. Using default: 5.`)
+      errors.push(`dlconfig.json: Invalid maxChunksPerQuery. Using default: 10.`)
     } else {
       config.maxChunksPerQuery = n
     }

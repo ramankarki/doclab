@@ -568,7 +568,7 @@ Rules:
     "ollamaUrl": "http://localhost:11434"
   },
   "rebuildInterval": "24h",
-  "maxChunksPerQuery": 5,
+  "maxChunksPerQuery": 10,
   "idleTimeout": "30m"
 }
 ```
@@ -584,7 +584,7 @@ Rules:
 | `embedding.ollamaUrl` | string | `"http://localhost:11434"` | Custom Ollama host                              |
 | `embedding.apiKey`    | string | —                          | API key. Supports `$ENV_VAR`.                   |
 | `rebuildInterval`     | string | `"24h"`                    | Auto-rebuild: `"12h"`, `"7d"`, `"never"`        |
-| `maxChunksPerQuery`   | number | `5`                        | Top K chunks per search                         |
+| `maxChunksPerQuery`   | number | `10`                       | Top K chunks per search                         |
 | `idleTimeout`         | string | `"30m"`                    | Auto-shutdown after idle                        |
 
 ### 4.5 Source Metadata

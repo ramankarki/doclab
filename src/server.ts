@@ -43,7 +43,7 @@ import {
   peekQueue,
   listQueue
 } from './db'
-import { loadConfig, saveConfig, addSourceToConfig, removeSourceFromConfig } from './config'
+import { loadConfig, addSourceToConfig, removeSourceFromConfig } from './config'
 import { c } from './lib/colors'
 
 export interface ServerState {

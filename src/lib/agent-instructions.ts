@@ -17,7 +17,7 @@ doclab first. Guesswork produces broken code.
 | \`doclab search "<query>"\` | Search indexed docs (hybrid: vector + keyword) |
 | \`doclab search "<q>" --source <name>\` | Filter by source (CRITICAL: use when multiple sources match keywords) |
 | \`doclab search "<q>" --kind <kind>\` | Filter by kind (docs/article/tutorial/reference) |
-| \`doclab search "<q>" --topK <n>\` | Return more results (default 5) |
+| \`doclab search "<q>" --topK <n>\` | Return more results (default 10) |
 | \`doclab list\` | List all indexed sources |
 | \`doclab status\` | Daemon health, chunk counts, freshness |
 | \`doclab add <url> [--name <n>]\` | Fetch → extract → chunk → embed → index |

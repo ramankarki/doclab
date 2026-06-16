@@ -180,7 +180,7 @@ doclab search "drizzle schema" --topK 10          # Return more results
     "ollamaUrl": "http://localhost:11434"
   },
   "rebuildInterval": "24h",
-  "maxChunksPerQuery": 5,
+  "maxChunksPerQuery": 10,
   "idleTimeout": "30m",
   "jinaApiKey": ""
 }
@@ -192,7 +192,7 @@ doclab search "drizzle schema" --topK 10          # Return more results
 | `embedding.model`    | auto       | Model override per provider                                                   |
 | `embedding.apiKey`   | —          | API key. Supports `$ENV_VAR` syntax                                           |
 | `rebuildInterval`    | `"24h"`    | `"12h"`, `"7d"`, `"never"`                                                    |
-| `maxChunksPerQuery`  | `5`        | Top K results per search                                                      |
+| `maxChunksPerQuery`  | `10`       | Top K results per search                                                      |
 | `idleTimeout`        | `"30m"`    | Auto-shutdown timeout. `"never"` to disable                                   |
 | `jinaApiKey`         | `""`       | Optional Jina AI API key for higher rate limits on Cloudflare-protected pages |
 

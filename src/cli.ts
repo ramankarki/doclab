@@ -1234,7 +1234,7 @@ function printHelp() {
     `  ${c.cyan}--kind${c.reset} ${c.dim}<kind>${c.reset}             ${c.dim}Filter by kind (docs, article, tutorial, reference)${c.reset}`
   )
   console.log(
-    `  ${c.cyan}--topK${c.reset} ${c.dim}<n>${c.reset}                ${c.dim}Max results (default: 5)${c.reset}`
+    `  ${c.cyan}--topK${c.reset} ${c.dim}<n>${c.reset}                ${c.dim}Max results (default: 10)${c.reset}`
   )
   console.log()
   console.log(`${c.bold}Examples:${c.reset}`)

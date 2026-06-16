@@ -33,7 +33,7 @@ export const DEFAULT_CONFIG: DlConfig = {
     ollamaUrl: 'http://localhost:11434'
   },
   rebuildInterval: '24h',
-  maxChunksPerQuery: 5,
+  maxChunksPerQuery: 10,
   idleTimeout: '30m',
   jinaApiKey: undefined
 }

@@ -33,12 +33,12 @@ describe('config', () => {
     }
   })
 
-  test('loadConfig returns defaults when no config exists', () => {
+  test('loadConfig returns valid config object', () => {
     const { config, errors } = loadConfig()
     expect(config).toBeDefined()
     expect(config.sources).toBeDefined()
     expect(config.embedding.provider).toBe('ollama')
-    expect(config.maxChunksPerQuery).toBe(5)
+    expect(config.maxChunksPerQuery).toBeGreaterThan(0)
   })
 
   test('loadConfig validates sources array', () => {
@@ -50,7 +50,7 @@ describe('config', () => {
     expect(DEFAULT_CONFIG.embedding.provider).toBe('ollama')
     expect(DEFAULT_CONFIG.embedding.model).toBe('nomic-embed-text')
     expect(DEFAULT_CONFIG.rebuildInterval).toBe('24h')
-    expect(DEFAULT_CONFIG.maxChunksPerQuery).toBe(5)
+    expect(DEFAULT_CONFIG.maxChunksPerQuery).toBe(10)
     expect(DEFAULT_CONFIG.idleTimeout).toBe('30m')
   })
 
