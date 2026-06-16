@@ -40,6 +40,11 @@ async function main() {
   const args = process.argv.slice(2)
   const command = args[0]
 
+  if (command === '-v' || command === '--version') {
+    console.log(`v${packageVersion()}`)
+    return
+  }
+
   if (!command || command === 'help' || command === '--help' || command === '-h') {
     printHelp()
     return
@@ -1144,6 +1149,15 @@ function parseIntervalStr(interval: string): number {
   }
 }
 
+function packageVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(join(import.meta.dir, '..', 'package.json'), 'utf-8'))
+    return pkg.version
+  } catch {
+    return 'unknown'
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -1170,6 +1184,7 @@ function printHelp() {
   console.log(`${c.dim}Usage:${c.reset} ${c.bold}doclab${c.reset} ${c.dim}<command>${c.reset} ${c.dim}[...flags]${c.reset} ${c.dim}[...args]${c.reset}
 `)
   console.log(`${c.bold}Commands:${c.reset}`)
+  console.log(`  ${c.cyan}-v | --version${c.reset}             ${c.dim}Print version${c.reset}`)
   console.log(`  ${c.cyan}help${c.reset}                      ${c.dim}Show this help${c.reset}`)
   console.log(
     `  ${c.cyan}start${c.reset}                     ${c.dim}Start global daemon (idempotent)${c.reset}`

@@ -104,6 +104,7 @@ Agent asks "how to use Bun with Drizzle ORM"
 | `doclab start`                  | Start background daemon (idempotent, auto-starts on any command) |
 | `doclab stop`                   | Stop daemon                                                      |
 | `doclab status`                 | Daemon health, chunk count, Ollama status, uptime                |
+| `doclab -v \| --version`        | Print version                                                    |
 | `doclab mem \| memory`          | Real-time memory usage (RSS, heap, DB, logs, vector index)       |
 | `doclab add <url> [--name <n>]` | Queue source for processing in background                        |
 | `doclab log`                    | Attach to live worker log — shows fetch, chunk, embed progress  |

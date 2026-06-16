@@ -236,6 +236,7 @@ doclab pull [name]              # queue re-fetch sources
 doclab rebuild                  # queue full re-index
 doclab search <query> [--source <n>] [--topK <k>]  # hybrid search
 doclab init                     # generate AGENTS.md snippet
+doclab -v | --version           # print version
 doclab mem                       # real-time memory usage (daemon, CLI, DB, logs, vec idx)
 doclab memory                    # alias for doclab mem
 ```

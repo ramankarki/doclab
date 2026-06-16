@@ -47,3 +47,4 @@ bun run src/cli.ts    # Run local CLI (not global doclab)
 - **Surgical changes.** Touch only what the task requires. Don't refactor adjacent code.
 - **Read docs first.** `docs/HOW_IT_WORKS.md` for beginners. `docs/DOCLAB_SPEC.md` for full design. `README.md` for user-facing docs.
 - **Test local daemon.** Always test with `bun run src/cli.ts`, not global `doclab`. Bun runs TS directly.
+- **Update docs when needed.** After any change that affects behavior, API, CLI surface, config, or workflow, update the relevant docs (`docs/DOCLAB_SPEC.md`, `README.md`, `docs/HOW_IT_WORKS.md`). Update `src/lib/agent-instructions.ts` if the agent-facing snippet needs it. Don't leave docs stale.

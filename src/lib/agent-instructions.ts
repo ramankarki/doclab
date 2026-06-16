@@ -23,6 +23,10 @@ doclab first. Guesswork produces broken code.
 | \`doclab add <url> [--name <n>]\` | Fetch → extract → chunk → embed → index |
 | \`doclab pull [name]\` | Re-fetch all or one source |
 | \`doclab rebuild\` | Drop DB, re-index everything |
+| \`doclab -v \| --version\` | Print version |
+| \`doclab log\` | Attach to live worker log |
+| \`doclab queue \| q\` | Show write queue |
+| \`doclab mem \| memory\` | Real-time memory usage |
 
 ### When to query doclab
 
