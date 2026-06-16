@@ -178,16 +178,12 @@ $ doclab start                          # first run: no config yet
 [OK] Ready on http://127.0.0.1:8475
 
 $ doclab add https://hono.dev/llms-full.txt
-Fetching... 842 KB (done)
-✂️ Chunked: 312 sections
-Embedding 312 chunks... ████████████ 100% (12s)
-Added "hono" — 312 chunks indexed
+queued: https://hono.dev/llms-full.txt
+check status: doclab log
 
 $ doclab add https://overreacted.io/why-do-hooks-rely-on-call-order/
-Fetching... 45 KB (done)
-✂️ Chunked: 8 sections
-Embedding 8 chunks... ████████████ 100% (<1s)
-Added "overreacted-why-do-hooks" — 8 chunks indexed
+queued: https://overreacted.io/why-do-hooks-rely-on-call-order
+check status: doclab log
 
 $ doclab search "react hooks call order"
 1. overreacted-why-do-hooks (distance: 0.08)
@@ -198,16 +194,18 @@ $ doclab search "react hooks call order"
 ### 3.4 Source Management CLI
 
 ```
-doclab add <url> [--name <name>]    # fetch + chunk + embed + add to config
-doclab remove <name>                # delete chunks + remove from config
+doclab add <url> [--name <name>]    # queue source for background processing
+doclab log                          # attach to live worker log (real-time progress)
+doclab queue                        # show queued and processing jobs
+doclab remove <name>                # queue source removal
 doclab list                         # all sources with freshness
-doclab pull [name]                  # re-fetch all or one source
-doclab rebuild                      # drop everything, re-index from scratch
+doclab pull [name]                  # queue re-fetch
+doclab rebuild                      # queue full re-index
 ```
 
-**`doclab add`:** Fetches URL. Auto-detects format (markdown or HTML). Converts HTML to markdown. Chunks. Embeds. Adds to `dlconfig.json`. Name auto-generated from URL if not provided: domain + path slug (`overreacted-why-do-hooks`).
+**`doclab add`:** Queues URL for background processing. The worker fetches, converts HTML to markdown, chunks, and embeds. Name auto-generated from URL if not provided. Check progress with `doclab log`.
 
-**`doclab remove`:** Deletes all chunks for source. Removes from `dlconfig.json`. Embeddings cascade-delete via vec0 rowid.
+**`doclab log`:** Attaches to the daemon's live worker stream. Shows real-time fetch, chunk, and embed progress with timestamps. Detach with Ctrl+C.
 
 **`doclab list`:**
 
@@ -229,11 +227,13 @@ total: 4
 doclab start                    # start global daemon (idempotent)
 doclab stop                     # stop daemon
 doclab status                   # daemon status, chunk count, ollama status
-doclab add <url> [--name <n>]   # add source: fetch → chunk → embed → config
-doclab remove <name>            # remove source: delete chunks + config entry
+doclab add <url> [--name <n>]   # queue source (worker processes in background)
+doclab log                      # attach to live worker log
+doclab queue                    # show queued and processing jobs
+doclab remove <name>            # queue source removal
 doclab list                     # all sources with freshness
-doclab pull [name]              # re-fetch sources, update changed
-doclab rebuild                  # drop DB, re-index all from scratch
+doclab pull [name]              # queue re-fetch sources
+doclab rebuild                  # queue full re-index
 doclab search <query> [--source <n>] [--topK <k>]  # hybrid search
 doclab init                     # generate AGENTS.md snippet
 doclab mem                       # real-time memory usage (daemon, CLI, DB, logs, vec idx)
@@ -423,18 +423,20 @@ dlconfig.json: Source 'missing-docs' has no 'url' field.
 
 Validation runs on startup AND on `doclab add` (before committing to config). Invalid `add` is rejected before any fetch.
 
-### 3.12 Concurrency & Locking
+### 3.12 Concurrency & Queue
 
-SQLite in WAL mode handles concurrent reads natively. Writes are serialized.
+SQLite in WAL mode handles concurrent reads natively. Writes are serialized through a DB-backed FIFO queue.
 
 | Scenario                               | Handling                                                      |
 | -------------------------------------- | ------------------------------------------------------------- |
 | Multiple `search` calls simultaneously | ✅ WAL mode. Concurrent reads, safe.                          |
-| `search` while `pull` is running       | ✅ Reads see old data until pull commits. WAL isolation.      |
-| Two `pull` calls simultaneously        | ❌ Second pull returns error: "Rebuild already in progress."  |
-| Two `add` calls simultaneously         | ❌ Second add returns error: "Another operation in progress." |
+| `search` while write is running        | ✅ Reads see old data until write commits. WAL isolation.     |
+| Two `add` calls simultaneously         | ✅ Second add enqueued, processed after first completes.      |
+| Two `pull` calls simultaneously        | ✅ Second pull enqueued. No 409 errors.                       |
 
-**Write lock:** A single in-memory mutex (`isWriting` flag) gates all write operations (pull, rebuild, add, remove). If a write is in progress, subsequent write requests get HTTP 409 Conflict. Reads are never blocked.
+**Queue system:** All write operations (add, remove, pull, rebuild) are enqueued to a `write_queue` table in SQLite. A worker loop picks jobs FIFO, processes them sequentially, and broadcasts progress to `/log` subscribers. The queue survives daemon crashes — unfinished jobs are resumed on restart.
+
+**Write lock:** An in-memory `isWriting` flag prevents the worker from processing multiple jobs simultaneously. HTTP handlers that enqueue with a callback will receive the result when their job completes.
 
 ### 3.13 Daemon Lifecycle
 
@@ -1154,10 +1156,12 @@ doclab runs on http://127.0.0.1:{port}. Auto-starts on first search.
 | `GET` | `/health` | — | `HealthResponse` | Health check |
 | `POST` | `/search` | `SearchRequest` | `SearchResponse` | Hybrid search |
 | `GET` | `/sources` | — | `SourceMeta[]` | List sources |
-| `POST` | `/add` | `{ url, name? }` | `SourceMeta` | Add + fetch + index |
-| `POST` | `/remove` | `{ name }` | `{ ok }` | Remove source |
-| `POST` | `/pull` | `{ name? }` | `{ updated[] }` | Re-fetch sources |
-| `POST` | `/rebuild` | — | `{ ok }` | Full re-index |
+| `POST` | `/add` | `{ url, name? }` | `SourceMeta` | Queue add + fetch + index |
+| `POST` | `/remove` | `{ name }` | `{ ok }` | Queue remove source |
+| `POST` | `/pull` | `{ name? }` | `{ updated[] }` | Queue re-fetch sources |
+| `POST` | `/rebuild` | — | `{ ok }` | Queue full re-index |
+| `GET` | `/queue` | — | `QueueStatus` | List queued jobs |
+| `GET` | `/log` | — | NDJSON stream | Live worker events |
 
 **Response types:**
 
@@ -1217,7 +1221,6 @@ interface ErrorResponse {
 | 400    | `BAD_REQUEST`       | Missing required field (`"Missing 'query' field"`)                    |
 | 400    | `INVALID_SOURCE`    | Source name not found (`"Source 'react' not found"`)                  |
 | 400    | `INVALID_URL`       | URL malformed (`"Invalid URL: 'not-a-url'"`)                          |
-| 409    | `WRITE_IN_PROGRESS` | Another write operation running (`"Rebuild already in progress"`)     |
 | 500    | `INTERNAL`          | Unexpected server error (`"Failed to connect to Ollama"`)             |
 | 503    | `NOT_READY`         | Server starting up (`"Indexing in progress, retry in a few seconds"`) |
 
@@ -1369,7 +1372,7 @@ Added ──────────→ Active ──────────→
 doclab pull           # re-fetch all, update changed
 doclab pull hono      # re-fetch one
 doclab rebuild        # drop everything, re-index from scratch
-doclab add <url>      # add new source immediately
+doclab add <url>      # queue new source (processed in background)
 doclab remove <name>  # delete source immediately
 ```
 

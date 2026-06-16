@@ -13,8 +13,12 @@ bun add -g doclab
 doclab start
 
 # Add docs via llms.txt (auto-expands to full documentation)
+# add queues in background — check progress with `doclab log`
 doclab add https://better-auth.com/llms.txt
 doclab add https://hono.dev/llms-full.txt
+
+# Watch live progress (Ctrl+C to detach)
+doclab log
 
 # Or any URL — blog posts, guides, API references
 doclab add https://orm.drizzle.team/llms-full.txt
@@ -101,15 +105,17 @@ Agent asks "how to use Bun with Drizzle ORM"
 | `doclab stop`                   | Stop daemon                                                      |
 | `doclab status`                 | Daemon health, chunk count, Ollama status, uptime                |
 | `doclab mem \| memory`          | Real-time memory usage (RSS, heap, DB, logs, vector index)       |
-| `doclab add <url> [--name <n>]` | Fetch → extract content → chunk → embed → index                  |
-| `doclab remove <name>`          | Delete source and all chunks                                     |
+| `doclab add <url> [--name <n>]` | Queue source for processing in background                        |
+| `doclab log`                    | Attach to live worker log — shows fetch, chunk, embed progress  |
+| `doclab queue` / `doclab q`     | Show queued and processing jobs                                  |
+| `doclab remove <name>`          | Queue source removal                                             |
 | `doclab list`                   | All sources with chunk counts and freshness                      |
-| `doclab pull [name]`            | Re-fetch all or one source, update changed content               |
+| `doclab pull [name]`            | Queue re-fetch of all or one source                              |
 | `doclab search <query> [...]`   | Hybrid search (vector + keyword + RRF fusion)                    |
-| `doclab rebuild`                | Drop DB, re-index all sources from scratch                       |
+| `doclab rebuild`                | Queue full re-index of all sources                               |
 | `doclab init`                   | Generate AGENTS.md snippet for your agent's system prompt        |
 
-The daemon auto-shuts down after 30 minutes idle. It auto-starts on the next command.
+The daemon auto-shuts down after 30 minutes idle (no requests AND queue empty). It auto-starts on the next command.
 
 ### Search Options
 
@@ -202,6 +208,16 @@ doclab search "deployment" --topK 10
 ### Source management
 
 ```bash
+# Add sources — all queue in background, worker processes them sequentially
+doclab add https://hono.dev/llms-full.txt
+doclab add https://zod.dev/llms-full.txt
+
+# Watch live progress (fetch, chunk, embed)
+doclab log
+
+# Check queue status
+doclab queue
+
 # Check freshness — stale sources show ⚠
 doclab list
 
@@ -237,15 +253,17 @@ The daemon runs on `http://127.0.0.1:{port}` (bind to localhost only). No authen
 
 ## HTTP API
 
-| Method | Path       | Body                               | Description           |
-| ------ | ---------- | ---------------------------------- | --------------------- |
-| `GET`  | `/health`  | —                                  | Health check + status |
-| `POST` | `/search`  | `{ query, source?, kind?, topK? }` | Hybrid search         |
-| `GET`  | `/sources` | —                                  | List all sources      |
-| `POST` | `/add`     | `{ url, name? }`                   | Add + fetch + index   |
-| `POST` | `/remove`  | `{ name }`                         | Remove source         |
-| `POST` | `/pull`    | `{ name? }`                        | Re-fetch sources      |
-| `POST` | `/rebuild` | —                                  | Full re-index         |
+| Method | Path       | Body                               | Description                |
+| ------ | ---------- | ---------------------------------- | -------------------------- |
+| `GET`  | `/health`  | —                                  | Health check + status      |
+| `POST` | `/search`  | `{ query, source?, kind?, topK? }` | Hybrid search              |
+| `GET`  | `/sources` | —                                  | List all sources           |
+| `POST` | `/add`     | `{ url, name? }`                   | Queue add + fetch + index  |
+| `POST` | `/remove`  | `{ name }`                         | Queue remove source        |
+| `POST` | `/pull`    | `{ name? }`                        | Queue re-fetch sources     |
+| `POST` | `/rebuild` | —                                  | Queue full re-index        |
+| `GET`  | `/queue`   | —                                  | List queued jobs           |
+| `GET`  | `/log`     | —                                  | NDJSON stream of worker events |
 
 ## Resource Profile
 
