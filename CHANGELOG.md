@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.9.2](https://github.com/ramankarki/doclab/compare/doclab-v1.9.1...doclab-v1.9.2) (2026-06-18)
+
+
+### Bug Fixes
+
+* weighted RRF with distance penalty prevents keyword spam from dominating semantic search ([57eb36f](https://github.com/ramankarki/doclab/commit/57eb36ff7b7dee0ae45b960b1d6f3bae2f6d70fc))
+
 ## [1.9.1](https://github.com/ramankarki/doclab/compare/doclab-v1.9.0...doclab-v1.9.1) (2026-06-16)
 
 
