@@ -46,10 +46,16 @@ export function htmlToMarkdown(html: string): string {
   let content = bodyMatch ? bodyMatch[1] : html
 
   // Strip elements that are never useful for search/context
-  const removeTags = ['nav', 'footer', 'script', 'style', 'aside', 'noscript']
+  const removeTags = ['nav', 'footer', 'script', 'style', 'aside', 'noscript', 'template']
   for (const tag of removeTags) {
     content = content.replace(new RegExp(`<${tag}[^>]*>[\\s\\S]*?<\\/${tag}>`, 'gi'), '')
   }
+
+  // Strip Next.js RSC flight data that survives script-tag removal.
+  // self.__next_f.push() calls with base64 blobs pollute the extracted text.
+  content = content.replace(/<script[^>]*type=["']application\/json["'][^>]*>[\s\S]*?<\/script>/gi, '')
+  content = content.replace(/self\.__next_f\s*\.?\s*push\s*\([^)]*\)/gi, '')
+  content = content.replace(/__next_f\s*=/gi, '')
 
   return turndown.turndown(content)
 }

@@ -326,18 +326,22 @@ The column weights (`1.0, 0.5, 0.25`) mean: matches in `content` count fully, `h
 
 ### 6d. Merge the results
 
-Both searches return ranked lists. doclab combines them using **Reciprocal Rank Fusion (RRF)**:
+Both searches return ranked lists. doclab combines them using **weighted Reciprocal Rank Fusion (RRF)** with quality gates:
 
 ```
-Score for a chunk = 1/(60 + vector_rank) + 1/(60 + keyword_rank)
+Vector contribution  = 0.6 / (60 + vector_rank)    ← semantic similarity matters more
+Keyword contribution = 0.4 / (60 + keyword_rank)   ← exact terms are supplementary
 ```
 
-This means:
-- A chunk ranked #1 in vector search gets `1/61 ≈ 0.016`
-- The same chunk ranked #3 in keyword search gets `1/63 ≈ 0.016`  
-- **Total: 0.032**
+Vector search carries more weight (0.6 vs 0.4) because semantic understanding is the stronger signal. But keyword search catches exact API names and function signatures that embeddings might miss.
 
-A chunk that appears in *both* lists gets a higher combined score. That's usually the most relevant result — semantically related AND containing the exact keyword.
+**Distance penalty:** When vector search finds a chunk but with poor semantic distance (above 0.5), the keyword contribution is penalized. This prevents coincidental word overlap from dominating. For example, a query for "project structure best practices" won't rank a page about "HEAD Request Best Practices" just because both contain the words "best" and "practices" — the vector distance tells us it's not actually about project structure.
+
+**Mutual confirmation boost (1.3×):** When both vector AND keyword independently find the same chunk AND the vector distance is strong (≤ 0.3), the score gets boosted. This rewards chunks that are both semantically relevant AND contain the query terms. But only when the vector is confident — if vector distance is weak, the overlap is probably coincidental and no boost is applied.
+
+Example scores:
+- A chunk ranked #1 in vector (distance 0.08) and #3 in keyword → `0.6/61 + 0.4/64 = 0.016` → boosted to `0.021`
+- A chunk ranked #1 in keyword but #45 in vector (distance 0.80) → keyword contribution penalized to `0.08/61 = 0.001` → total `0.008` → falls behind more relevant results
 
 ### 6e. Return results
 
@@ -403,7 +407,7 @@ doclab add https://hono.dev/llms-full.txt
 | **Distance** | How far apart two vectors are. Smaller = more similar. |
 | **sqlite-vec** | A SQLite extension for vector search. Lets you do "find nearest" queries. |
 | **Hybrid search** | Combining two search methods (vector + keyword) for better results. |
-| **RRF** | Reciprocal Rank Fusion. A math formula that merges two ranked lists into one. |
+| **RRF** | Reciprocal Rank Fusion. A math formula that merges two ranked lists into one. doclab uses weighted RRF (vector 0.6, keyword 0.4) with a distance-based quality gate to prevent coincidental keyword matches from outranking semantically relevant results. |
 | **Ollama** | A program that runs AI models on your computer. doclab uses it for embeddings. |
 | **turndown** | A JavaScript library that converts HTML to clean markdown. |
 | **GFM** | GitHub Flavored Markdown — markdown with table support, task lists, strikethrough. |

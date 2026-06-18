@@ -234,7 +234,7 @@ doclab remove <name>            # queue source removal
 doclab list                     # all sources with freshness
 doclab pull [name]              # queue re-fetch sources
 doclab rebuild                  # queue full re-index
-doclab search <query> [--source <n>] [--topK <k>]  # hybrid search
+doclab search <query> [--source <n>] [--kind <k>] [--topK <k>]  # hybrid search
 doclab init                     # generate AGENTS.md snippet
 doclab -v | --version           # print version
 doclab mem                       # real-time memory usage (daemon, CLI, DB, logs, vec idx)
@@ -543,6 +543,8 @@ Rules:
 - `<article>`, `<main>` → content extracted from these if present
 
 **turndown + GFM plugin.** HTML → Markdown conversion uses the battle-tested turndown library with GitHub Flavored Markdown plugin for table support. Custom rule preserves framework-specific `<Tab>` component labels. Navigation, footers, and scripts are stripped before conversion.
+
+**Next.js RSC stripping.** Before conversion, doclab strips Next.js-specific RSC (React Server Component) flight data patterns (`self.__next_f.push(…)`, `__next_f=` assignments, `application/json` script tags) that would otherwise pollute the extracted markdown with unreadable base64 blobs and serialized React fiber data.
 
 ### 4.4 Config: `~/.doclab/dlconfig.json`
 
@@ -1046,16 +1048,44 @@ Two parallel paths:
             Format as result set
 ```
 
-### 7.2 Reciprocal Rank Fusion
+### 7.2 Reciprocal Rank Fusion (Weighted + Quality-Gated)
+
+RRF merges vector and keyword result lists with weighted contributions, a distance-based quality penalty, and mutual confirmation boost:
+
+- **Vector weight: 0.6** — semantic similarity carries more signal than token overlap.
+- **Keyword weight: 0.4** — exact term matches are supplementary, not primary.
+- **Distance penalty:** When vector finds a chunk with distance > 0.5 (weak semantic match), the keyword contribution is penalized proportionally. This prevents coincidental token overlap from dominating (e.g., "HEAD Request Best Practices" matching "project structure best practices").
+- **Mutual confirmation boost (1.3×):** When both vector AND keyword independently find the same chunk AND vector distance ≤ 0.3 (strong semantic match), the fusion score is boosted. This rewards chunks that are both semantically relevant and contain the query terms.
 
 ```typescript
-function rrf(resultsA: ScoredResult[], resultsB: ScoredResult[], k = 60) {
-  const scores = new Map<string, number>()
-  resultsA.forEach((r, i) => scores.set(r.hash, (scores.get(r.hash) ?? 0) + 1 / (k + i + 1)))
-  resultsB.forEach((r, i) => scores.set(r.hash, (scores.get(r.hash) ?? 0) + 1 / (k + i + 1)))
-  return Array.from(scores.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, topK)
+function rrfFusion(vecResults, kwResults) {
+  const scores = new Map()
+
+  // Vector pass (weight 0.6)
+  for (const [i, r] of vecResults.entries())
+    scores.set(r.hash, { result: r, score: 0.6/(60+i+1), fromVec: true })
+
+  // Keyword pass (weight 0.4, penalized if vector disagrees)
+  for (const [i, r] of kwResults.entries()) {
+    const existing = scores.get(r.hash)
+    let kwWeight = 0.4
+    if (existing?.result.distance > 0.5)
+      kwWeight *= Math.max(0.2, 1 - existing.result.distance)  // down to 0.08 at dist=0.8
+    scores.set(r.hash, {
+      result: existing?.result ?? r,
+      score: (existing?.score ?? 0) + kwWeight/(60+i+1),
+      confirmedBy: (existing ? ['vec','kw'] : ['kw'])
+    })
+  }
+
+  return [...scores.values()]
+    .map(e => ({
+      ...e.result,
+      fusionScore: e.confirmedBy?.length === 2 && e.result.distance <= 0.3
+        ? e.score * 1.3  // mutual confirmation boost
+        : e.score
+    }))
+    .sort((a, b) => b.fusionScore - a.fusionScore)
 }
 ```
 

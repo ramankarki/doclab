@@ -7,6 +7,9 @@ import type { Database } from 'bun:sqlite'
 import { searchSimilar, isVecLoaded } from '../db'
 
 const RRF_K = 60
+const VECTOR_WEIGHT = 0.6
+const KEYWORD_WEIGHT = 0.4
+const MUTUAL_BOOST = 1.3
 
 export function hybridSearch(
   db: Database,
@@ -159,33 +162,63 @@ function keywordSearch(
 }
 
 // ── Reciprocal Rank Fusion ──
+// Weighted: vector contributes more than keyword (semantic > token overlap).
+// Mutual confirmation: chunks found by both methods boosted 1.3x.
 
 function rrfFusion(resultsA: ScoredResult[], resultsB: ScoredResult[]): ScoredResult[] {
-  const scores = new Map<string, { result: ScoredResult; score: number }>()
+  const scores = new Map<string, { result: ScoredResult; score: number; confirmedBy: Set<'vec' | 'kw'> }>()
 
+  // Vector results (weight 0.6)
   for (let i = 0; i < resultsA.length; i++) {
     const r = resultsA[i]
     const key = r.hash
     const existing = scores.get(key)
-    const score = (existing?.score ?? 0) + 1 / (RRF_K + i + 1)
-    scores.set(key, { result: r, score })
+    const contribution = VECTOR_WEIGHT / (RRF_K + i + 1)
+    const score = (existing?.score ?? 0) + contribution
+    const confirmedBy = existing?.confirmedBy ?? new Set()
+    confirmedBy.add('vec')
+    scores.set(key, { result: r, score, confirmedBy })
   }
 
+  // Keyword results (weight 0.4)
   for (let i = 0; i < resultsB.length; i++) {
     const r = resultsB[i]
     const key = r.hash
     const existing = scores.get(key)
-    const score = (existing?.score ?? 0) + 1 / (RRF_K + i + 1)
+    const contribution = KEYWORD_WEIGHT / (RRF_K + i + 1)
+    const score = (existing?.score ?? 0) + contribution
+    const confirmedBy = existing?.confirmedBy ?? new Set()
+    confirmedBy.add('kw')
     scores.set(key, {
       result: existing?.result ?? r,
-      score
+      score,
+      confirmedBy
     })
   }
 
   return Array.from(scores.values())
-    .sort((a, b) => b.score - a.score)
-    .map((entry) => ({
-      ...entry.result,
-      fusionScore: entry.score
-    }))
+    .map((entry) => {
+      let score = entry.score
+
+      // Penalize chunks where vector found them but with poor semantic distance.
+      // High vector distance (>0.5) means the keyword token overlap is coincidental
+      // (e.g., "HEAD Request Best Practices" matching "project structure best practices").
+      const fromVec = entry.confirmedBy.has('vec')
+      const vecDist = entry.result.distance
+      if (fromVec && vecDist != null && vecDist > 0.5) {
+        score *= Math.max(0.2, 1 - vecDist)
+      }
+
+      // Mutual confirmation boost only when vector is confident (distance ≤ 0.3).
+      // Prevents boosting coincidental keyword+vector overlaps on irrelevant pages.
+      if (entry.confirmedBy.size === 2 && (!fromVec || (vecDist != null && vecDist <= 0.3))) {
+        score *= MUTUAL_BOOST
+      }
+
+      return {
+        ...entry.result,
+        fusionScore: score
+      }
+    })
+    .sort((a, b) => (b.fusionScore ?? 0) - (a.fusionScore ?? 0))
 }
